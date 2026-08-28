@@ -1,0 +1,175 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title description">
+  <title id="title">DingTalk Competitor Monitor Skill workflow</title>
+  <desc id="description">A bilingual four-stage workflow from defining monitoring scope to delivering a verified competitor digest to DingTalk safely.</desc>
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#172033" flood-opacity="0.08"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8B98A9"/>
+    </marker>
+    <style>
+      .sans { font-family: Inter, -apple-system, BlinkMacSystemFont, "Hiragino Sans GB", "Arial Unicode MS", Arial, sans-serif; }
+      .title { font-size: 42px; font-weight: 750; fill: #172033; }
+      .subtitle { font-size: 22px; font-weight: 500; fill: #506074; }
+      .stage-number { font-size: 18px; font-weight: 750; fill: #FFFFFF; }
+      .stage-en { font-size: 23px; font-weight: 750; fill: #172033; }
+      .stage-zh { font-size: 18px; font-weight: 650; fill: #506074; }
+      .item { font-size: 17px; font-weight: 520; fill: #334155; }
+      .item-muted { font-size: 15px; font-weight: 500; fill: #66758A; }
+      .footer-title { font-size: 21px; font-weight: 750; fill: #172033; }
+      .footer-copy { font-size: 16px; font-weight: 520; fill: #506074; }
+      .footer-step { font-size: 16px; font-weight: 700; fill: #172033; }
+      .pill { font-size: 14px; font-weight: 750; fill: #334155; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="900" fill="#F5F8FB"/>
+  <rect x="0" y="0" width="1600" height="14" fill="#2563EB"/>
+
+  <g class="sans">
+    <text class="title" x="70" y="88">DingTalk Competitor Monitor Skill</text>
+    <text class="subtitle" x="70" y="126">钉钉竞品监控：从公开信号到可信群日报</text>
+    <text class="subtitle" x="70" y="160">Turn public competitor signals into a verified, deduplicated and safely delivered digest.</text>
+
+    <g transform="translate(1202 58)">
+      <rect width="146" height="36" rx="6" fill="#E8F1FF" stroke="#B7D1FA"/>
+      <circle cx="20" cy="18" r="6" fill="#2563EB"/>
+      <text class="pill" x="34" y="23">ANY INDUSTRY</text>
+      <rect x="158" width="164" height="36" rx="6" fill="#E7F7F1" stroke="#B4E3D2"/>
+      <path d="M176 18 l5 5 10 -12" fill="none" stroke="#0F9D7A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      <text class="pill" x="198" y="23">SAFE BY DEFAULT</text>
+    </g>
+
+    <!-- Stage 1 -->
+    <g filter="url(#shadow)">
+      <rect x="70" y="220" width="330" height="352" rx="8" fill="#FFFFFF" stroke="#DCE4ED"/>
+    </g>
+    <rect x="70" y="220" width="330" height="8" rx="4" fill="#2563EB"/>
+    <circle cx="112" cy="272" r="22" fill="#2563EB"/>
+    <text class="stage-number" x="106" y="279">1</text>
+    <g transform="translate(326 247)" fill="none" stroke="#2563EB" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="18" cy="18" r="15"/>
+      <circle cx="18" cy="18" r="7"/>
+      <path d="M18 2 v5 M18 29 v5 M2 18 h5 M29 18 h5"/>
+    </g>
+    <text class="stage-en" x="92" y="326">Define the scope</text>
+    <text class="stage-zh" x="92" y="354">定义行业与监控口径</text>
+    <line x1="92" y1="378" x2="378" y2="378" stroke="#E7ECF2"/>
+    <circle cx="101" cy="411" r="4" fill="#2563EB"/>
+    <text class="item" x="116" y="417">Industry and regions</text>
+    <text class="item-muted" x="116" y="440">行业边界、国内与海外范围</text>
+    <circle cx="101" cy="473" r="4" fill="#2563EB"/>
+    <text class="item" x="116" y="479">Competitors and aliases</text>
+    <text class="item-muted" x="116" y="502">竞品、别名与优先级</text>
+    <circle cx="101" cy="535" r="4" fill="#2563EB"/>
+    <text class="item" x="116" y="541">Schedule and digest format</text>
+
+    <!-- Stage 2 -->
+    <line x1="410" y1="396" x2="432" y2="396" stroke="#8B98A9" stroke-width="3" marker-end="url(#arrow)"/>
+    <g filter="url(#shadow)">
+      <rect x="445" y="220" width="330" height="352" rx="8" fill="#FFFFFF" stroke="#DCE4ED"/>
+    </g>
+    <rect x="445" y="220" width="330" height="8" rx="4" fill="#0F9D7A"/>
+    <circle cx="487" cy="272" r="22" fill="#0F9D7A"/>
+    <text class="stage-number" x="481" y="279">2</text>
+    <g transform="translate(699 247)" fill="none" stroke="#0F9D7A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="15" cy="15" r="11"/>
+      <path d="M23 23 l10 10"/>
+      <path d="M10 15 h10 M15 10 v10" opacity="0.5"/>
+    </g>
+    <text class="stage-en" x="467" y="326">Discover signals</text>
+    <text class="stage-zh" x="467" y="354">发现国内外公开线索</text>
+    <line x1="467" y1="378" x2="753" y2="378" stroke="#E7ECF2"/>
+    <circle cx="476" cy="411" r="4" fill="#0F9D7A"/>
+    <text class="item" x="491" y="417">Public news and official pages</text>
+    <text class="item-muted" x="491" y="440">聚合搜索只用于发现候选</text>
+    <circle cx="476" cy="473" r="4" fill="#0F9D7A"/>
+    <text class="item" x="491" y="479">Domestic and global coverage</text>
+    <text class="item-muted" x="491" y="502">按竞品优先级筛选和排序</text>
+    <circle cx="476" cy="535" r="4" fill="#0F9D7A"/>
+    <text class="item" x="491" y="541">Structured candidate feed</text>
+
+    <!-- Stage 3 -->
+    <line x1="785" y1="396" x2="807" y2="396" stroke="#8B98A9" stroke-width="3" marker-end="url(#arrow)"/>
+    <g filter="url(#shadow)">
+      <rect x="820" y="220" width="330" height="352" rx="8" fill="#FFFFFF" stroke="#DCE4ED"/>
+    </g>
+    <rect x="820" y="220" width="330" height="8" rx="4" fill="#F59E0B"/>
+    <circle cx="862" cy="272" r="22" fill="#F59E0B"/>
+    <text class="stage-number" x="856" y="279">3</text>
+    <g transform="translate(1074 247)" fill="none" stroke="#D88700" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 31 h31"/>
+      <rect x="7" y="17" width="5" height="10"/>
+      <rect x="17" y="10" width="5" height="17"/>
+      <rect x="27" y="3" width="5" height="24"/>
+    </g>
+    <text class="stage-en" x="842" y="326">Verify and analyze</text>
+    <text class="stage-zh" x="842" y="354">原文核验、分析与去重</text>
+    <line x1="842" y1="378" x2="1128" y2="378" stroke="#E7ECF2"/>
+    <circle cx="851" cy="411" r="4" fill="#F59E0B"/>
+    <text class="item" x="866" y="417">Open and verify every source</text>
+    <text class="item-muted" x="866" y="440">事实与推断分开表达</text>
+    <circle cx="851" cy="473" r="4" fill="#F59E0B"/>
+    <text class="item" x="866" y="479">Analysis or brief digest</text>
+    <text class="item-muted" x="866" y="502">分析版或快讯版</text>
+    <circle cx="851" cy="535" r="4" fill="#F59E0B"/>
+    <text class="item" x="866" y="541">SQLite title-fingerprint dedupe</text>
+
+    <!-- Stage 4 -->
+    <line x1="1160" y1="396" x2="1182" y2="396" stroke="#8B98A9" stroke-width="3" marker-end="url(#arrow)"/>
+    <g filter="url(#shadow)">
+      <rect x="1195" y="220" width="330" height="352" rx="8" fill="#FFFFFF" stroke="#DCE4ED"/>
+    </g>
+    <rect x="1195" y="220" width="330" height="8" rx="4" fill="#E04961"/>
+    <circle cx="1237" cy="272" r="22" fill="#E04961"/>
+    <text class="stage-number" x="1231" y="279">4</text>
+    <g transform="translate(1447 246)" fill="none" stroke="#E04961" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 5 h30 v22 h-16 l-8 7 v-7 h-6 z"/>
+      <path d="M11 13 h16 M11 19 h11"/>
+    </g>
+    <text class="stage-en" x="1217" y="326">Deliver safely</text>
+    <text class="stage-zh" x="1217" y="354">预览确认后安全播报</text>
+    <line x1="1217" y1="378" x2="1503" y2="378" stroke="#E7ECF2"/>
+    <circle cx="1226" cy="411" r="4" fill="#E04961"/>
+    <text class="item" x="1241" y="417">Preview before real sending</text>
+    <text class="item-muted" x="1241" y="440">目标、全文与 @ 行为确认</text>
+    <circle cx="1226" cy="473" r="4" fill="#E04961"/>
+    <text class="item" x="1241" y="479">Signed DingTalk webhook</text>
+    <text class="item-muted" x="1241" y="502">默认不 @ 任何人</text>
+    <circle cx="1226" cy="535" r="4" fill="#E04961"/>
+    <text class="item" x="1241" y="541">Weekday scheduling in Codex</text>
+
+    <!-- Security band -->
+    <rect x="70" y="622" width="1455" height="205" rx="8" fill="#FFFFFF" stroke="#DCE4ED"/>
+    <rect x="70" y="622" width="10" height="205" rx="5" fill="#172033"/>
+    <g transform="translate(106 654)" fill="none" stroke="#172033" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="15" width="32" height="25" rx="4"/>
+      <path d="M10 15 v-7 a9 9 0 0 1 18 0 v7"/>
+      <circle cx="19" cy="27" r="3" fill="#172033"/>
+    </g>
+    <text class="footer-title" x="160" y="680">Credentials stay out of chat, project files and Git</text>
+    <text class="footer-copy" x="160" y="708">Webhook 与加签密钥不进入对话、命令参数、项目文件、截图或 Git 历史</text>
+
+    <g transform="translate(116 748)">
+      <rect width="260" height="52" rx="6" fill="#F5F8FB" stroke="#DCE4ED"/>
+      <text class="footer-step" x="18" y="23">Webhook + signing secret</text>
+      <text class="item-muted" x="18" y="43">仅在用户终端隐藏输入</text>
+
+      <line x1="276" y1="26" x2="316" y2="26" stroke="#8B98A9" stroke-width="3" marker-end="url(#arrow)"/>
+      <rect x="330" width="300" height="52" rx="6" fill="#E8F1FF" stroke="#B7D1FA"/>
+      <text class="footer-step" x="348" y="23">Keychain / Secret Manager</text>
+      <text class="item-muted" x="348" y="43">本地钥匙串或云端密钥管理</text>
+
+      <line x1="646" y1="26" x2="686" y2="26" stroke="#8B98A9" stroke-width="3" marker-end="url(#arrow)"/>
+      <rect x="700" width="260" height="52" rx="6" fill="#FFF5DC" stroke="#F0D28E"/>
+      <text class="footer-step" x="718" y="23">HMAC signed request</text>
+      <text class="item-muted" x="718" y="43">发送时临时完成加签</text>
+
+      <line x1="976" y1="26" x2="1016" y2="26" stroke="#8B98A9" stroke-width="3" marker-end="url(#arrow)"/>
+      <rect x="1030" width="285" height="52" rx="6" fill="#FCECEF" stroke="#F2BCC6"/>
+      <text class="footer-step" x="1048" y="23">Confirmed DingTalk group</text>
+      <text class="item-muted" x="1048" y="43">只发到已确认的 Webhook 绑定群</text>
+    </g>
+  </g>
+</svg>
