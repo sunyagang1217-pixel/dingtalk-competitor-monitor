@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "__PROJECT_SLUG__"
+version = "0.1.0"
+description = "__INDUSTRY_NAME__竞品监控与钉钉分析日报机器人"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["certifi>=2024.8.30"]
+
+[project.scripts]
+competitor-monitor-bot = "competitor_monitor_bot.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
