@@ -1,0 +1,28 @@
+{
+  "industry": {
+    "name": "__INDUSTRY_NAME__",
+    "digest_title": "__DIGEST_TITLE__"
+  },
+  "schedule": {
+    "timezone": "Asia/Shanghai",
+    "cron": "30 10 * * 1-5",
+    "weekdays": [1, 2, 3, 4, 5]
+  },
+  "digest": {
+    "format": "analysis",
+    "max_items": 8,
+    "lookback_days": 7,
+    "preferred_domestic_items": 6,
+    "preferred_international_items": 2
+  },
+  "competitors": [
+    {
+      "id": "sample-competitor",
+      "name": "示例竞品",
+      "region": "domestic",
+      "priority": 2,
+      "aliases": ["示例竞品"],
+      "query": "\"示例竞品\" __INDUSTRY_NAME__"
+    }
+  ]
+}
