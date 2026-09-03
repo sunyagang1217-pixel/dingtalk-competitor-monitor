@@ -21,6 +21,12 @@ PLACEHOLDER_PATTERN = re.compile(r"__[A-Z0-9_]+__")
 SLUG_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 ALLOWED_REGIONS = {"domestic", "international"}
 REGION_LABELS = {"domestic": "国内", "international": "海外"}
+DISCOVERY_SOURCE_DEFINITIONS = {
+    "google_news": ("Google News", "国内+海外"),
+    "baidu": ("百度搜索", "国内+海外"),
+    "360": ("360搜索", "国内+海外"),
+    "wechat_articles": ("微信公众号搜索", "所有提及竞品的公众号文章"),
+}
 WEEKDAY_LABELS = {
     1: "周一",
     2: "周二",
@@ -108,6 +114,12 @@ def _integer(
     return value
 
 
+def _boolean(value: Any, label: str) -> bool:
+    if not isinstance(value, bool):
+        raise SpecError(f"{label}必须是布尔值。")
+    return value
+
+
 def _slug(value: Any, label: str) -> str:
     slug = _text(value, label, maximum=63)
     if not SLUG_PATTERN.fullmatch(slug):
@@ -155,6 +167,8 @@ def validate_spec(raw: Any) -> dict[str, Any]:
             "regions",
             "schedule",
             "digest",
+            "sources",
+            "carryover",
             "competitors",
         },
         allowed={
@@ -163,6 +177,8 @@ def validate_spec(raw: Any) -> dict[str, Any]:
             "regions",
             "schedule",
             "digest",
+            "sources",
+            "carryover",
             "competitors",
         },
     )
@@ -281,6 +297,42 @@ def validate_spec(raw: Any) -> dict[str, Any]:
     if "international" not in regions and preferred_international != 0:
         raise SpecError("未监控海外地区时，海外优先条数必须为 0。")
 
+    sources = _object(
+        root["sources"],
+        "sources",
+        required={"enabled"},
+        allowed={"enabled"},
+    )
+    enabled_sources_raw = _unique_text_list(
+        sources["enabled"],
+        "sources.enabled",
+        maximum_items=len(DISCOVERY_SOURCE_DEFINITIONS),
+    )
+    unsupported_sources = [
+        source_id
+        for source_id in enabled_sources_raw
+        if source_id not in DISCOVERY_SOURCE_DEFINITIONS
+    ]
+    if unsupported_sources:
+        raise SpecError(
+            "sources.enabled 包含不支持的来源："
+            + "、".join(unsupported_sources)
+            + "。"
+        )
+    enabled_sources = [
+        source_id
+        for source_id in DISCOVERY_SOURCE_DEFINITIONS
+        if source_id in enabled_sources_raw
+    ]
+
+    carryover = _object(
+        root["carryover"],
+        "carryover",
+        required={"enabled"},
+        allowed={"enabled"},
+    )
+    carryover_enabled = _boolean(carryover["enabled"], "carryover.enabled")
+
     competitors_raw = root["competitors"]
     if not isinstance(competitors_raw, list) or not competitors_raw:
         raise SpecError("competitors 必须是非空列表。")
@@ -354,6 +406,8 @@ def validate_spec(raw: Any) -> dict[str, Any]:
             "preferred_domestic_items": preferred_domestic,
             "preferred_international_items": preferred_international,
         },
+        "sources": {"enabled": enabled_sources},
+        "carryover": {"enabled": carryover_enabled},
         "competitors": competitors,
     }
 
@@ -396,6 +450,10 @@ def _replacement_values(spec: dict[str, Any]) -> dict[str, str]:
         "__DIGEST_FORMAT_LABEL__": format_label,
         "__DIGEST_FORMAT_GUIDANCE__": format_guidance,
         "__MAX_ITEMS__": str(spec["digest"]["max_items"]),
+        "__DISCOVERY_SOURCE_LIST__": "、".join(
+            DISCOVERY_SOURCE_DEFINITIONS[source_id][0]
+            for source_id in spec["sources"]["enabled"]
+        ),
     }
 
 
@@ -411,6 +469,36 @@ def _write_monitoring_config(project_root: Path, spec: dict[str, Any]) -> None:
             "weekdays": spec["schedule"]["weekdays"],
         },
         "digest": spec["digest"],
+        "sources": {
+            "discovery": [
+                {
+                    "id": source_id,
+                    "name": source_name,
+                    "enabled": source_id in spec["sources"]["enabled"],
+                    "scope": (
+                        f"{'、'.join(REGION_LABELS[item] for item in spec['regions'])}，"
+                        "所有提及竞品的公众号文章"
+                        if source_id == "wechat_articles"
+                        else "、".join(REGION_LABELS[item] for item in spec["regions"])
+                    ),
+                    "regions": spec["regions"],
+                }
+                for source_id, (source_name, _scope) in DISCOVERY_SOURCE_DEFINITIONS.items()
+            ],
+            "verification": {
+                "require_original": True,
+                "allow_official_public_notices": True,
+                "promotional_content_label_required": True,
+                "exclude_unreadable": True,
+                "empty_digest_requires_successful_source": True,
+            },
+        },
+        "carryover": {
+            "enabled": spec["carryover"]["enabled"],
+            "path": "data/pending_articles.json",
+            "reverify_before_send": True,
+            "send_after_next_scheduled_run": True,
+        },
         "competitors": spec["competitors"],
     }
     config_path = project_root / "config" / "monitoring.json"
@@ -518,6 +606,14 @@ def main() -> int:
     print(f"项目目录：{output}")
     print(f"行业：{spec['industry']['name']}")
     print(f"竞品数量：{len(spec['competitors'])}")
+    print(
+        "发现来源："
+        + "、".join(
+            DISCOVERY_SOURCE_DEFINITIONS[source_id][0]
+            for source_id in spec["sources"]["enabled"]
+        )
+        + "（同级）"
+    )
     print(
         "运行时间："
         f"{_weekday_description(spec['schedule']['weekdays'])} "

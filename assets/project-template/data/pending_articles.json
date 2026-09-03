@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "queue_rules": "config/analysis_prompt.md",
+  "articles": []
+}

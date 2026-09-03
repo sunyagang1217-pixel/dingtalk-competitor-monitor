@@ -46,6 +46,8 @@
 
 用户未明确授权“符合这些边界的日报可自动发送”时，自动化必须停在草稿预览，不执行发送。用户授权后也不得扩大目标群、监控范围、频率或 `@` 行为；任何边界变化都要重新确认。
 
+自动发送只能调用项目的 `send-analysis --confirm SEND_TO_DINGTALK`，固定不 `@`。不要改用通用 `send`、`curl`、其他 Webhook 或其他消息渠道。只有返回 `status=sent` 且 `errcode=0` 才视为成功；`status=already_sent` 时不得重发，其他结果不得写成发送成功。
+
 ## 官方参考
 
 - [钉钉机器人概述](https://open.dingtalk.com/document/orgapp/robot-overview)

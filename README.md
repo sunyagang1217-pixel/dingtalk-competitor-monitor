@@ -10,9 +10,12 @@ A reusable Codex Skill that guides a user from industry scoping to a verified, d
 
 - Defines the industry boundary, regions, topics, competitors, aliases and priorities through a guided conversation.
 - Monitors domestic and global public signals for any industry, not just a fixed competitor list.
-- Uses aggregators only for discovery, then requires the original article or official page to be opened and verified.
+- Collects Google News, Baidu, 360 Search and WeChat public-account search as peer discovery sources.
+- Searches WeChat articles with every competitor name and alias, including mentions from non-official accounts.
+- Uses search results only for discovery, then requires the original article, public-account post, official page or public notice to be opened and verified.
 - Separates facts from inference and supports both an analysis digest and a concise breaking-news format.
 - Prevents repeated delivery with normalized title fingerprints and SQLite state.
+- Carries verified important items to a chosen delivery date and requires them to be reverified before sending.
 - Provides a Chinese terminal wizard for DingTalk Webhook and signing-secret validation.
 - Stores local credentials in macOS Keychain and keeps them out of chat, project files, logs and Git.
 - Previews the full destination, message and mention behavior before a real test or first digest is sent.
@@ -23,7 +26,7 @@ A reusable Codex Skill that guides a user from industry scoping to a verified, d
 | Stage | Outcome |
 | --- | --- |
 | 1. Scope | Confirm the industry, regions, competitors, aliases, priorities, schedule and digest format. |
-| 2. Generate | Create a complete Python project with configuration, collection, analysis, sending and tests. |
+| 2. Generate | Create a Python project with four-source collection, verification, carryover, sending, deduplication and tests. |
 | 3. Configure | Validate the DingTalk Webhook and signing secret in a friendly Chinese terminal flow. |
 | 4. Verify | Preview and explicitly approve one connection test and one analyzed digest. |
 | 5. Automate | Schedule weekday or weekly runs in Codex Desktop, either as drafts or authorized sends. |
@@ -35,16 +38,16 @@ A reusable Codex Skill that guides a user from industry scoping to a verified, d
 - Codex Desktop, Codex CLI or the Codex IDE extension with local Skill support.
 - macOS and Python 3.11 or later for the generated project.
 - Access to a DingTalk group where you can configure a custom robot.
-- Access to this private GitHub repository.
+- Access to GitHub; this repository is public.
 
 ### Install for your user account
 
-Codex loads user Skills from `$HOME/.agents/skills`. Clone this repository into that directory:
+Clone this repository into your personal Codex Skill directory:
 
 ```bash
-mkdir -p "$HOME/.agents/skills"
+mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills"
 git clone https://github.com/sunyagang1217-pixel/dingtalk-competitor-monitor.git \
-  "$HOME/.agents/skills/dingtalk-competitor-monitor"
+  "${CODEX_HOME:-$HOME/.codex}/skills/dingtalk-competitor-monitor"
 ```
 
 Codex detects Skill changes automatically. Restart Codex if the Skill does not appear.
@@ -76,7 +79,8 @@ The scaffolded project includes:
 | --- | --- |
 | `config/monitoring.json` | Industry scope, competitors, aliases, priorities, regions and schedule. |
 | `config/analysis_prompt.md` | Original-source verification and digest-writing rules. |
-| `src/competitor_monitor_bot/` | Collection, analysis, DingTalk signing, dispatch and SQLite state. |
+| `data/pending_articles.json` | Verified important items intentionally deferred to a future digest. |
+| `src/competitor_monitor_bot/` | Four-source collection, analysis, carryover, DingTalk signing, dispatch and SQLite state. |
 | `scripts/configure_dingtalk.sh` | Chinese credential setup and validation wizard. |
 | `tests/` | Unit tests for configuration, signing, analysis, collection, dispatch and deduplication. |
 
@@ -90,15 +94,17 @@ PYTHONPATH=src .venv/bin/python -m competitor_monitor_bot.cli analysis-preview \
   --input data/analysis.json
 ```
 
-These commands validate configuration or build previews. Real sends remain protected by explicit confirmation in the guided workflow.
+`collect-json` records enabled sources, successful sources and sanitized failure reasons. Search timestamps and content types remain explicitly unverified until corrected from the original source, so raw candidates cannot pass `analysis-preview`. These commands do not send DingTalk messages; real sends remain protected by explicit confirmation in the guided workflow.
 
 ## Safety model
 
 | Boundary | Behavior |
 | --- | --- |
 | Credentials | Never request or store Webhooks, tokens or signing secrets in chat, files, screenshots, logs or Git. |
-| Sources | Remove an item when the original source cannot be read, is outside the time window or does not support the claim. |
-| Content | Keep verified facts separate from interpretation; label company claims as claims. |
+| Sources | Treat all four sources as peers and never bypass login or security checks. Stop when every source fails instead of sending a false empty digest. |
+| Verification | Remove unreadable, out-of-window or unsupported claims; record the real public-account name and content type. |
+| Content | Separate facts from interpretation, label brand claims, and identify the nature and subject of court or regulatory notices. |
+| Carryover | Reverify every due item and never silently remove it; mark it `sent` only after DingTalk succeeds. |
 | Sending | Show the bound-group target, full title, full body and mention behavior before a real message. |
 | Mentions | Do not mention anyone by default. |
 | Deduplication | Record state only after successful delivery; suppress same-day reruns and previously sent articles. |
@@ -123,6 +129,9 @@ Run the project-template test suite from the repository root:
 ```bash
 PYTHONPATH=assets/project-template/src python3 -m unittest discover \
   -s assets/project-template/tests -v
+python3 -m unittest discover -s tests -v
+python3 -m compileall -q assets/project-template/src \
+  assets/project-template/tests scripts tests
 ```
 
 Also validate the Skill directory with the `quick_validate.py` script bundled with the Codex `skill-creator` Skill after changing `SKILL.md` or `agents/openai.yaml`.

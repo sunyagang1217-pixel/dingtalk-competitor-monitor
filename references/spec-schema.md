@@ -36,6 +36,12 @@
     "preferred_domestic_items": 4,
     "preferred_international_items": 2
   },
+  "sources": {
+    "enabled": ["google_news", "baidu", "360", "wechat_articles"]
+  },
+  "carryover": {
+    "enabled": true
+  },
   "competitors": [
     {
       "id": "example-tech",
@@ -72,10 +78,16 @@
 | `digest.max_items` | 1-20 |
 | `digest.lookback_days` | 1-30 |
 | 地区优先条数 | 两项之和必须等于 `max_items`；未选地区必须为 0 |
+| `sources.enabled` | 非空且不重复；可选 `google_news`、`baidu`、`360`、`wechat_articles`，默认四类全部启用并同级采集 |
+| `carryover.enabled` | 是否生成并使用延期候选队列；默认 `true` |
 | `competitor.id` | 唯一、稳定的 ASCII slug |
 | `competitor.priority` | 1-5，5 为最高优先级 |
 | `competitor.aliases` | 至少包含正式名称；加入英文名、旧名、产品名等真实别名 |
 | `competitor.query` | 必须包含至少一个别名，可使用引号和 `OR` 缩小噪声 |
+
+脚手架会把全部四类来源写入 `config/monitoring.json`，未启用的来源保留配置但设为 `enabled: false`。Google News、百度和 360 使用 `competitor.query`；微信公众号搜索忽略其中的行业限定词，改用 `competitor.aliases` 中的全部名称，不限公众号主体类型。
+
+启用延期队列时，项目包含 `data/pending_articles.json`。人工确认需要在未来发送的重要条目时，写入完整的原文核验字段、`review_status: "verified"`、`queue_status: "queued"` 和 ISO 日期 `send_after`。到期条目会进入当期分析文件并清空摘要，强制重新核验；发送成功后由程序标记为 `sent`，不要手工改写 SQLite。
 
 ## 生成命令
 

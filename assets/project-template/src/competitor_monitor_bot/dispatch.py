@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from .analysis import build_analysis_markdown, load_analysis_document
+from .carryover import CarryoverError, load_due_articles, mark_pending_sent
+from .dingtalk import DingTalkError
 from .monitoring import MonitoringConfig
 from .state import DigestState
 
@@ -28,6 +30,8 @@ class DispatchResult:
     skipped_sent_articles: int
     errcode: Any = None
     errmsg: Any = None
+    carryover_completed: int = 0
+    warnings: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -55,10 +59,26 @@ def dispatch_analysis(
             skipped_sent_articles=0,
         )
 
+    due_fingerprints = (
+        {
+            article.fingerprint
+            for article in load_due_articles(
+                config.carryover.path,
+                on_date=local_now.date(),
+                competitors=config.competitors,
+            )
+        }
+        if config.carryover.enabled
+        else set()
+    )
+    previously_sent_due = state.sent_fingerprints(due_fingerprints)
     analyzed = load_analysis_document(
         input_path,
         digest_format=config.digest.format,
         max_items=config.digest.max_items,
+        lookback_days=config.digest.lookback_days,
+        required_fingerprints=due_fingerprints - previously_sent_due,
+        competitors=config.competitors,
     )
     sent_fingerprints = state.sent_fingerprints(
         item.article.fingerprint for item in analyzed
@@ -85,7 +105,24 @@ def dispatch_analysis(
         state.release_claim(digest_date)
         raise
 
+    if response.get("errcode") != 0:
+        state.release_claim(digest_date)
+        raise DingTalkError(
+            "钉钉未确认消息发送成功；未写入日报发送状态。"
+        )
+
     state.complete_run(digest_date, local_now, fresh)
+    carryover_completed = 0
+    warnings: list[str] = []
+    if config.carryover.enabled:
+        try:
+            carryover_completed = mark_pending_sent(
+                config.carryover.path,
+                (item.article.fingerprint for item in fresh),
+                sent_at=local_now,
+            )
+        except CarryoverError as exc:
+            warnings.append(str(exc))
     return DispatchResult(
         status="sent",
         digest_date=digest_date,
@@ -93,4 +130,6 @@ def dispatch_analysis(
         skipped_sent_articles=skipped,
         errcode=response.get("errcode"),
         errmsg=response.get("errmsg"),
+        carryover_completed=carryover_completed,
+        warnings=tuple(warnings),
     )

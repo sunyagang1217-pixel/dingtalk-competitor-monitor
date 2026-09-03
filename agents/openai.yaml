@@ -1,4 +1,4 @@
 interface:
   display_name: "钉钉竞品监控机器人"
-  short_description: "逐步引导生成、验证并运行适合自己行业的钉钉竞品监控机器人"
-  default_prompt: "使用 $dingtalk-competitor-monitor 帮我逐步创建一个适合所在行业的钉钉竞品监控机器人。"
+  short_description: "四源采集、原文核验并安全定时播报任意行业的竞品动态"
+  default_prompt: "使用 $dingtalk-competitor-monitor 帮我逐步创建一个四源采集、原文核验的钉钉行业竞品监控机器人。"

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title description">
   <title id="title">DingTalk Competitor Monitor Skill workflow</title>
-  <desc id="description">A bilingual four-stage workflow from defining monitoring scope to delivering a verified competitor digest to DingTalk safely.</desc>
+  <desc id="description">A bilingual four-stage workflow using four peer discovery sources, original-source verification, carryover review and safe DingTalk delivery.</desc>
   <defs>
     <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
       <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#172033" flood-opacity="0.08"/>
@@ -78,17 +78,18 @@
       <path d="M23 23 l10 10"/>
       <path d="M10 15 h10 M15 10 v10" opacity="0.5"/>
     </g>
-    <text class="stage-en" x="467" y="326">Discover signals</text>
-    <text class="stage-zh" x="467" y="354">发现国内外公开线索</text>
+    <text class="stage-en" x="467" y="326">Collect four peer sources</text>
+    <text class="stage-zh" x="467" y="354">四类来源同级采集</text>
     <line x1="467" y1="378" x2="753" y2="378" stroke="#E7ECF2"/>
     <circle cx="476" cy="411" r="4" fill="#0F9D7A"/>
-    <text class="item" x="491" y="417">Public news and official pages</text>
-    <text class="item-muted" x="491" y="440">聚合搜索只用于发现候选</text>
+    <text class="item" x="491" y="417">Google News + Baidu</text>
+    <text class="item-muted" x="491" y="440">Google News + 百度搜索</text>
     <circle cx="476" cy="473" r="4" fill="#0F9D7A"/>
-    <text class="item" x="491" y="479">Domestic and global coverage</text>
-    <text class="item-muted" x="491" y="502">按竞品优先级筛选和排序</text>
+    <text class="item" x="491" y="479">360 Search + WeChat</text>
+    <text class="item-muted" x="491" y="502">360搜索 + 公众号文章搜索</text>
     <circle cx="476" cy="535" r="4" fill="#0F9D7A"/>
-    <text class="item" x="491" y="541">Structured candidate feed</text>
+    <text class="item" x="491" y="541">All competitor aliases</text>
+    <text class="item-muted" x="491" y="562">所有竞品和别名统一检索</text>
 
     <!-- Stage 3 -->
     <line x1="785" y1="396" x2="807" y2="396" stroke="#8B98A9" stroke-width="3" marker-end="url(#arrow)"/>
@@ -108,13 +109,14 @@
     <text class="stage-zh" x="842" y="354">原文核验、分析与去重</text>
     <line x1="842" y1="378" x2="1128" y2="378" stroke="#E7ECF2"/>
     <circle cx="851" cy="411" r="4" fill="#F59E0B"/>
-    <text class="item" x="866" y="417">Open and verify every source</text>
-    <text class="item-muted" x="866" y="440">事实与推断分开表达</text>
+    <text class="item" x="866" y="417">Verify original + real date</text>
+    <text class="item-muted" x="866" y="440">原文直链、来源与内容属性</text>
     <circle cx="851" cy="473" r="4" fill="#F59E0B"/>
-    <text class="item" x="866" y="479">Analysis or brief digest</text>
-    <text class="item-muted" x="866" y="502">分析版或快讯版</text>
+    <text class="item" x="866" y="479">Notices + labeled brand content</text>
+    <text class="item-muted" x="866" y="502">法院/监管公告与品牌标注</text>
     <circle cx="851" cy="535" r="4" fill="#F59E0B"/>
-    <text class="item" x="866" y="541">SQLite title-fingerprint dedupe</text>
+    <text class="item" x="866" y="541">Carryover + SQLite dedupe</text>
+    <text class="item-muted" x="866" y="562">到期复核，成功后写入状态</text>
 
     <!-- Stage 4 -->
     <line x1="1160" y1="396" x2="1182" y2="396" stroke="#8B98A9" stroke-width="3" marker-end="url(#arrow)"/>
@@ -132,13 +134,14 @@
     <text class="stage-zh" x="1217" y="354">预览确认后安全播报</text>
     <line x1="1217" y1="378" x2="1503" y2="378" stroke="#E7ECF2"/>
     <circle cx="1226" cy="411" r="4" fill="#E04961"/>
-    <text class="item" x="1241" y="417">Preview before real sending</text>
-    <text class="item-muted" x="1241" y="440">目标、全文与 @ 行为确认</text>
+    <text class="item" x="1241" y="417">Stop when all sources fail</text>
+    <text class="item-muted" x="1241" y="440">全来源失败不发送空日报</text>
     <circle cx="1226" cy="473" r="4" fill="#E04961"/>
-    <text class="item" x="1241" y="479">Signed DingTalk webhook</text>
-    <text class="item-muted" x="1241" y="502">默认不 @ 任何人</text>
+    <text class="item" x="1241" y="479">Preview target, body, mentions</text>
+    <text class="item-muted" x="1241" y="502">目标、全文与 @ 行为确认</text>
     <circle cx="1226" cy="535" r="4" fill="#E04961"/>
-    <text class="item" x="1241" y="541">Weekday scheduling in Codex</text>
+    <text class="item" x="1241" y="541">Idempotent scheduled delivery</text>
+    <text class="item-muted" x="1241" y="562">仅 errcode=0 后写入状态</text>
 
     <!-- Security band -->
     <rect x="70" y="622" width="1455" height="205" rx="8" fill="#FFFFFF" stroke="#DCE4ED"/>

@@ -13,17 +13,26 @@ from .analysis import (
     build_analysis_template,
     load_analysis_document,
 )
+from .carryover import CarryoverError, load_due_articles, mark_pending_sent
 from .config import ConfigError, load_credentials
 from .digest import build_digest_markdown
 from .dispatch import dispatch_analysis
 from .dingtalk import DingTalkClient, DingTalkError, build_markdown_payload
 from .monitoring import MonitoringConfigError, load_monitoring_config
-from .news import NewsCollectionError, collect_news
+from .news import CollectionResult, NewsCollectionError, collect_news
 from .state import DigestState, DigestStateError
 
 
 LIVE_SEND_CONFIRMATION = "SEND_TO_DINGTALK"
 RECORD_SEND_CONFIRMATION = "RECORD_CONFIRMED_SEND"
+
+
+def _require_collection_success(collection: CollectionResult) -> None:
+    if collection.has_successful_source:
+        return
+    details = "；".join(collection.errors[:4])
+    suffix = f"原因：{details}" if details else "未返回可用来源结果。"
+    raise NewsCollectionError(f"所有配置采集来源均失败，未生成日报素材。{suffix}")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -172,6 +181,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "collect-preview":
             monitoring = load_monitoring_config(args.config)
             collection = collect_news(monitoring)
+            _require_collection_success(collection)
             print(build_digest_markdown(collection.articles, monitoring))
             if collection.errors:
                 print(
@@ -183,8 +193,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "collect-json":
             monitoring = load_monitoring_config(args.config)
             collection = collect_news(monitoring)
-            articles = collection.articles
+            _require_collection_success(collection)
+            local_now = datetime.now(monitoring.schedule.zoneinfo())
+            due_articles = (
+                load_due_articles(
+                    monitoring.carryover.path,
+                    on_date=local_now.date(),
+                    competitors=monitoring.competitors,
+                )
+                if monitoring.carryover.enabled
+                else ()
+            )
+            articles_by_fingerprint = {
+                article.fingerprint: article for article in collection.articles
+            }
+            for article in due_articles:
+                articles_by_fingerprint[article.fingerprint] = article
+            articles = tuple(articles_by_fingerprint.values())
             excluded_sent = 0
+            reconciled_carryover = 0
             if not args.include_sent:
                 state = DigestState(args.state)
                 sent_fingerprints = state.sent_fingerprints(
@@ -195,8 +222,37 @@ def main(argv: Sequence[str] | None = None) -> int:
                     for article in articles
                     if article.fingerprint not in sent_fingerprints
                 )
-                excluded_sent = len(collection.articles) - len(articles)
-            template = build_analysis_template(articles, monitoring)
+                excluded_sent = len(articles_by_fingerprint) - len(articles)
+                if monitoring.carryover.enabled:
+                    reconciled_carryover = mark_pending_sent(
+                        monitoring.carryover.path,
+                        sent_fingerprints,
+                        sent_at=local_now,
+                    )
+            due_fingerprints = {
+                article.fingerprint for article in due_articles
+            } - (sent_fingerprints if not args.include_sent else set())
+            template = build_analysis_template(
+                articles,
+                monitoring,
+                now=local_now,
+                required_fingerprints=due_fingerprints,
+            )
+            template["collection"] = {
+                "enabled_sources": [
+                    source.id
+                    for source in monitoring.discovery_sources
+                    if source.enabled
+                ],
+                "successful_sources": list(collection.successful_sources),
+                "source_errors": list(collection.errors),
+            }
+            template["carryover"] = {
+                "enabled": monitoring.carryover.enabled,
+                "due_articles": len(due_fingerprints),
+                "reverification_required": bool(due_fingerprints),
+                "reconciled_sent_articles": reconciled_carryover,
+            }
             serialized = json.dumps(template, ensure_ascii=False, indent=2) + "\n"
             if args.output:
                 output_path = Path(args.output)
@@ -209,6 +265,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                             "articles": len(template["articles"]),
                             "excluded_sent": excluded_sent,
                             "source_errors": len(collection.errors),
+                            "source_failures": list(collection.errors),
+                            "successful_sources": list(collection.successful_sources),
+                            "carryover_due": len(due_fingerprints),
+                            "carryover_reconciled": reconciled_carryover,
                         },
                         ensure_ascii=False,
                         indent=2,
@@ -220,12 +280,28 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         if args.command == "analysis-preview":
             monitoring = load_monitoring_config(args.config)
+            local_now = datetime.now(monitoring.schedule.zoneinfo())
+            required_fingerprints = (
+                {
+                    article.fingerprint
+                    for article in load_due_articles(
+                        monitoring.carryover.path,
+                        on_date=local_now.date(),
+                        competitors=monitoring.competitors,
+                    )
+                }
+                if monitoring.carryover.enabled
+                else set()
+            )
             analyzed = load_analysis_document(
                 args.input,
                 digest_format=monitoring.digest.format,
                 max_items=monitoring.digest.max_items,
+                lookback_days=monitoring.digest.lookback_days,
+                required_fingerprints=required_fingerprints,
+                competitors=monitoring.competitors,
             )
-            print(build_analysis_markdown(analyzed, monitoring))
+            print(build_analysis_markdown(analyzed, monitoring, now=local_now))
             return 0
 
         if args.command == "record-analysis-sent":
@@ -245,6 +321,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.input,
                 digest_format=monitoring.digest.format,
                 max_items=monitoring.digest.max_items,
+                lookback_days=monitoring.digest.lookback_days,
+                competitors=monitoring.competitors,
             )
             state = DigestState(args.state)
             state.record_confirmed_send(
@@ -252,12 +330,25 @@ def main(argv: Sequence[str] | None = None) -> int:
                 datetime.now().astimezone(),
                 analyzed,
             )
+            carryover_completed = 0
+            carryover_warnings: list[str] = []
+            if monitoring.carryover.enabled:
+                try:
+                    carryover_completed = mark_pending_sent(
+                        monitoring.carryover.path,
+                        (item.article.fingerprint for item in analyzed),
+                        sent_at=datetime.now(monitoring.schedule.zoneinfo()),
+                    )
+                except CarryoverError as exc:
+                    carryover_warnings.append(str(exc))
             print(
                 json.dumps(
                     {
                         "recorded": True,
                         "digest_date": digest_date,
                         "articles": len(analyzed),
+                        "carryover_completed": carryover_completed,
+                        "warnings": carryover_warnings,
                     },
                     ensure_ascii=False,
                     indent=2,
@@ -316,6 +407,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         DingTalkError,
         MonitoringConfigError,
         NewsCollectionError,
+        CarryoverError,
         DigestStateError,
         ValueError,
     ) as exc:

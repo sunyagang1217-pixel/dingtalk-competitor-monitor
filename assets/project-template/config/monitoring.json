@@ -15,6 +15,51 @@
     "preferred_domestic_items": 6,
     "preferred_international_items": 2
   },
+  "sources": {
+    "discovery": [
+      {
+        "id": "google_news",
+        "name": "Google News",
+        "enabled": true,
+        "scope": "国内+海外",
+        "regions": ["domestic", "international"]
+      },
+      {
+        "id": "baidu",
+        "name": "百度搜索",
+        "enabled": true,
+        "scope": "国内+海外",
+        "regions": ["domestic", "international"]
+      },
+      {
+        "id": "360",
+        "name": "360搜索",
+        "enabled": true,
+        "scope": "国内+海外",
+        "regions": ["domestic", "international"]
+      },
+      {
+        "id": "wechat_articles",
+        "name": "微信公众号搜索",
+        "enabled": true,
+        "scope": "国内+海外，所有提及竞品的公众号文章",
+        "regions": ["domestic", "international"]
+      }
+    ],
+    "verification": {
+      "require_original": true,
+      "allow_official_public_notices": true,
+      "promotional_content_label_required": true,
+      "exclude_unreadable": true,
+      "empty_digest_requires_successful_source": true
+    }
+  },
+  "carryover": {
+    "enabled": true,
+    "path": "data/pending_articles.json",
+    "reverify_before_send": true,
+    "send_after_next_scheduled_run": true
+  },
   "competitors": [
     {
       "id": "sample-competitor",
