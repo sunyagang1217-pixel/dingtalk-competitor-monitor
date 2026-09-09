@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import time
 import json
 from pathlib import Path
 from typing import Any
@@ -72,6 +73,7 @@ class ScheduleSettings:
     timezone: str
     cron: str
     weekdays: tuple[int, ...]
+    result_check_time: str | None = None
 
     def zoneinfo(self) -> ZoneInfo:
         return ZoneInfo(self.timezone)
@@ -257,6 +259,20 @@ def load_monitoring_config(path: str | Path | None = None) -> MonitoringConfig:
     timezone = schedule_data.get("timezone")
     cron = schedule_data.get("cron")
     weekdays = schedule_data.get("weekdays")
+    result_check_time = schedule_data.get("result_check_time")
+    if result_check_time is not None:
+        try:
+            if not isinstance(result_check_time, str) or len(result_check_time) != 5:
+                raise ValueError
+            time.fromisoformat(result_check_time)
+            fields = cron.split() if isinstance(cron, str) else []
+            if len(fields) != 5:
+                raise ValueError
+            send_time = time(hour=int(fields[1]), minute=int(fields[0]))
+            if time.fromisoformat(result_check_time) <= send_time:
+                raise ValueError
+        except (ValueError, TypeError):
+            raise MonitoringConfigError("复核时间须为 HH:MM，并晚于同日发送时间。") from None
     if not isinstance(timezone, str) or not isinstance(cron, str):
         raise MonitoringConfigError("必须填写时区和 Cron 表达式。")
     if (
@@ -350,6 +366,7 @@ def load_monitoring_config(path: str | Path | None = None) -> MonitoringConfig:
             timezone=timezone,
             cron=cron,
             weekdays=tuple(sorted(set(weekdays))),
+            result_check_time=result_check_time,
         ),
         digest=digest,
         competitors=tuple(competitors),

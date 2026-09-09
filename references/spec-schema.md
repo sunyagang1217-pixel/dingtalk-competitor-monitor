@@ -27,6 +27,7 @@
   "schedule": {
     "timezone": "Asia/Shanghai",
     "time": "10:30",
+    "result_check_time": "10:50",
     "weekdays": [1, 2, 3, 4, 5]
   },
   "digest": {
@@ -73,6 +74,7 @@
 | `industry.digest_title` | 钉钉消息主标题，不含日期 |
 | `regions` | `domestic`、`international` 至少一个；每个已选地区至少配置一个竞品 |
 | `schedule.time` | 24 小时制 `HH:MM` |
+| `schedule.result_check_time` | 可选 `HH:MM`，必须晚于同日播报时间；省略或 null 不增加后续触发，发送后仍执行结果检查 |
 | `schedule.weekdays` | ISO 星期：周一为 1，周日为 7；不可重复 |
 | `digest.format` | `analysis` 为事实摘要加影响判断；`brief` 为事实快讯 |
 | `digest.max_items` | 1-20 |
@@ -86,6 +88,8 @@
 | `competitor.query` | 必须包含至少一个别名，可使用引号和 `OR` 缩小噪声 |
 
 脚手架会把全部四类来源写入 `config/monitoring.json`，未启用的来源保留配置但设为 `enabled: false`。Google News、百度和 360 使用 `competitor.query`；微信公众号搜索忽略其中的行业限定词，改用 `competitor.aliases` 中的全部名称，不限公众号主体类型。
+
+启用结果复核时，脚手架把 `result_check_time` 写入监控配置，`check-result` 根据该时间输出定时路由 `phase`。脚手架不会创建自动化；由原生工具把用户确认的播报和复核时刻写入同一 heartbeat，避免重复挂载。跨小时的具体表达限制见 `automation-workflow.md`。
 
 启用延期队列时，项目包含 `data/pending_articles.json`。人工确认需要在未来发送的重要条目时，写入完整的原文核验字段、`review_status: "verified"`、`queue_status: "queued"` 和 ISO 日期 `send_after`。到期条目会进入当期分析文件并清空摘要，强制重新核验；发送成功后由程序标记为 `sent`，不要手工改写 SQLite。
 

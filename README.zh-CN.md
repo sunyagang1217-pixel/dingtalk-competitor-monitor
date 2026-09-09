@@ -20,6 +20,7 @@
 - 本地凭据保存到 macOS 登录钥匙串，不进入对话、项目文件、日志或 Git。
 - 每次连接测试和首份正式日报发送前，完整预览目标、消息全文和 `@` 行为。
 - 只有两轮真实消息都确认收到后，才会创建 Codex Desktop 定时任务。
+- 发送后只读核对真实成功记录；可在同一任务中安排稍后的结果复核，发现漏执行、发送中或记录不一致。
 
 ## 工作流程
 
@@ -77,6 +78,7 @@ Skill 会先询问监控范围和发送计划，然后展示完整的派生规�
 | --- | --- |
 | `config/monitoring.json` | 行业范围、竞品、别名、优先级、地区和时间配置。 |
 | `config/analysis_prompt.md` | 新闻原文核验和日报撰写规则。 |
+| `src/competitor_monitor_bot/result_check.py` | 只读核对当天发送记录、时间和文章数量，不加载凭据或发消息。 |
 | `data/pending_articles.json` | 已核验但需延期播报的重要候选队列。 |
 | `src/competitor_monitor_bot/` | 四源采集、分析、延期、钉钉加签、发送和 SQLite 状态管理。 |
 | `scripts/configure_dingtalk.sh` | 全中文凭据配置与校验向导。 |
@@ -93,6 +95,18 @@ PYTHONPATH=src .venv/bin/python -m competitor_monitor_bot.cli analysis-preview \
 ```
 
 `collect-json` 会输出启用来源、成功来源和脱敏失败原因。候选的搜索时间与内容属性默认标为未核验，只有校正为真实原文日期和受支持的内容类型后才能通过 `analysis-preview`。这些命令不会发送钉钉消息；真实发送仍受分步流程中的明确确认保护。
+
+## 确认日报确实发送
+
+```bash
+PYTHONPATH=src .venv/bin/python -m competitor_monitor_bot.cli check-result
+```
+
+检查使用配置时区的当天，只读 SQLite。`status=sent`、`complete=true` 且退出码 0 才证明本地成功发送记录完整一致；0 条空日报也有效。缺少记录、发送占位未完成、记录不一致或数据库不可读都会返回失败，不能把聊天显示“完成”当作消息已发送。`send-analysis` 自身也会输出 `delivery_check`，未完成时非零退出；群成员是否阅读不在检查范围内。
+
+可在规格中设置 `schedule.result_check_time`，例如 10:30 播报、10:50 再次只读复核。复核正常保持安静，缺失或异常按用户通知偏好反馈，禁止自动补发。同一会话只挂一个 heartbeat，通过 `phase` 区分两次触发；复核时间可配置，省略或 null 表示只保留发送后的检查。草稿任务不要求发送成功记录。两次触发都依赖本机开机、Codex 运行，不能保证离线时仍然执行。
+
+更新 Skill 不会覆盖已经生成的机器人项目。已有项目需单独迁移相关代码、配置与定时规则，并保留凭据、SQLite 和延期队列。
 
 ## 安全边界
 

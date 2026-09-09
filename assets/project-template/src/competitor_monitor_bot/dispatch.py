@@ -101,15 +101,15 @@ def dispatch_analysis(
     markdown = build_analysis_markdown(fresh, config, now=local_now)
     try:
         response = client.send_markdown(title, markdown, at_all=False)
+        if (
+            not isinstance(response, dict)
+            or type(response.get("errcode")) is not int
+            or response["errcode"] != 0
+        ):
+            raise DingTalkError("钉钉未确认消息发送成功；未写入日报发送状态。")
     except Exception:
         state.release_claim(digest_date)
         raise
-
-    if response.get("errcode") != 0:
-        state.release_claim(digest_date)
-        raise DingTalkError(
-            "钉钉未确认消息发送成功；未写入日报发送状态。"
-        )
 
     state.complete_run(digest_date, local_now, fresh)
     carryover_completed = 0

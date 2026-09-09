@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 import sqlite3
@@ -47,7 +48,7 @@ class DigestState:
         return connection
 
     def run_status(self, digest_date: str) -> str | None:
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             row = connection.execute(
                 "SELECT status FROM digest_runs WHERE digest_date = ?",
                 (digest_date,),
@@ -59,7 +60,7 @@ class DigestState:
         if not unique:
             return set()
         placeholders = ",".join("?" for _ in unique)
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             rows = connection.execute(
                 f"SELECT fingerprint FROM sent_articles "
                 f"WHERE fingerprint IN ({placeholders})",
@@ -68,7 +69,7 @@ class DigestState:
         return {str(row["fingerprint"]) for row in rows}
 
     def claim_run(self, digest_date: str, started_at: datetime) -> bool:
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             cursor = connection.execute(
                 """
                 INSERT OR IGNORE INTO digest_runs (
@@ -80,7 +81,7 @@ class DigestState:
         return cursor.rowcount == 1
 
     def release_claim(self, digest_date: str) -> None:
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             connection.execute(
                 "DELETE FROM digest_runs "
                 "WHERE digest_date = ? AND status = 'sending'",
@@ -95,7 +96,7 @@ class DigestState:
     ) -> None:
         article_items = tuple(articles)
         sent_at_value = sent_at.isoformat()
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             cursor = connection.execute(
                 """
                 UPDATE digest_runs
@@ -133,7 +134,7 @@ class DigestState:
     ) -> None:
         article_items = tuple(articles)
         sent_at_value = sent_at.isoformat()
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             connection.execute(
                 """
                 INSERT INTO digest_runs (

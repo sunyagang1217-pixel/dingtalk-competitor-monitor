@@ -229,7 +229,7 @@ def validate_spec(raw: Any) -> dict[str, Any]:
         root["schedule"],
         "schedule",
         required={"timezone", "time", "weekdays"},
-        allowed={"timezone", "time", "weekdays"},
+        allowed={"timezone", "time", "weekdays", "result_check_time"},
     )
     timezone = _text(schedule["timezone"], "schedule.timezone", maximum=80)
     try:
@@ -240,6 +240,13 @@ def validate_spec(raw: Any) -> dict[str, Any]:
     time_match = re.fullmatch(r"([01]\d|2[0-3]):([0-5]\d)", send_time)
     if not time_match:
         raise SpecError("schedule.time 必须使用 24 小时制 HH:MM，例如 10:30。")
+    result_check_time = schedule.get("result_check_time")
+    if result_check_time is not None:
+        result_check_time = _text(result_check_time, "schedule.result_check_time", maximum=5)
+        if not re.fullmatch(r"([01]\d|2[0-3]):([0-5]\d)", result_check_time):
+            raise SpecError("schedule.result_check_time 必须使用 HH:MM，或为 null。")
+        if result_check_time <= send_time:
+            raise SpecError("结果复核时间必须晚于同日发送时间。")
     weekdays_raw = schedule["weekdays"]
     if not isinstance(weekdays_raw, list) or not weekdays_raw:
         raise SpecError("schedule.weekdays 必须是非空列表。")
@@ -396,6 +403,7 @@ def validate_spec(raw: Any) -> dict[str, Any]:
         "schedule": {
             "timezone": timezone,
             "time": send_time,
+            "result_check_time": result_check_time,
             "weekdays": weekdays,
             "cron": f"{int(minute)} {int(hour)} * * {_cron_weekdays(weekdays)}",
         },
@@ -447,6 +455,11 @@ def _replacement_values(spec: dict[str, Any]) -> dict[str, str]:
             f"{spec['schedule']['time']}"
         ),
         "__LOOKBACK_DAYS__": str(spec["digest"]["lookback_days"]),
+        "__RESULT_CHECK_DESCRIPTION__": (
+            f"{spec['schedule']['result_check_time']}（同一时区，仅检查结果）"
+            if spec["schedule"]["result_check_time"]
+            else "未配置后续定时复核；发送后仍会检查结果"
+        ),
         "__DIGEST_FORMAT_LABEL__": format_label,
         "__DIGEST_FORMAT_GUIDANCE__": format_guidance,
         "__MAX_ITEMS__": str(spec["digest"]["max_items"]),
@@ -466,6 +479,7 @@ def _write_monitoring_config(project_root: Path, spec: dict[str, Any]) -> None:
         "schedule": {
             "timezone": spec["schedule"]["timezone"],
             "cron": spec["schedule"]["cron"],
+            "result_check_time": spec["schedule"]["result_check_time"],
             "weekdays": spec["schedule"]["weekdays"],
         },
         "digest": spec["digest"],
@@ -619,6 +633,8 @@ def main() -> int:
         f"{_weekday_description(spec['schedule']['weekdays'])} "
         f"{spec['schedule']['time']}（{spec['schedule']['timezone']}）"
     )
+    if spec["schedule"]["result_check_time"]:
+        print(f"结果复核：{spec['schedule']['result_check_time']}（只检查，不自动补发）")
     print("\n下一步请在终端依次运行：")
     print(f"cd {shlex.quote(str(output))}")
     print("python3 -m venv .venv")

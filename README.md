@@ -20,6 +20,7 @@ A reusable Codex Skill that guides a user from industry scoping to a verified, d
 - Stores local credentials in macOS Keychain and keeps them out of chat, project files, logs and Git.
 - Previews the full destination, message and mention behavior before a real test or first digest is sent.
 - Creates a Codex Desktop schedule only after both real-message checks have succeeded.
+- Verifies committed delivery records after sending and supports a later result check in the same scheduled task to detect skipped or unfinished runs.
 
 ## How it works
 
@@ -79,6 +80,7 @@ The scaffolded project includes:
 | --- | --- |
 | `config/monitoring.json` | Industry scope, competitors, aliases, priorities, regions and schedule. |
 | `config/analysis_prompt.md` | Original-source verification and digest-writing rules. |
+| `src/competitor_monitor_bot/result_check.py` | Read-only checks of the digest date, send timestamp and recorded article count, without credentials or sending. |
 | `data/pending_articles.json` | Verified important items intentionally deferred to a future digest. |
 | `src/competitor_monitor_bot/` | Four-source collection, analysis, carryover, DingTalk signing, dispatch and SQLite state. |
 | `scripts/configure_dingtalk.sh` | Chinese credential setup and validation wizard. |
@@ -95,6 +97,18 @@ PYTHONPATH=src .venv/bin/python -m competitor_monitor_bot.cli analysis-preview \
 ```
 
 `collect-json` records enabled sources, successful sources and sanitized failure reasons. Search timestamps and content types remain explicitly unverified until corrected from the original source, so raw candidates cannot pass `analysis-preview`. These commands do not send DingTalk messages; real sends remain protected by explicit confirmation in the guided workflow.
+
+## Verify delivery results
+
+```bash
+PYTHONPATH=src .venv/bin/python -m competitor_monitor_bot.cli check-result
+```
+
+The command checks today's SQLite records in the configured timezone without credentials, network requests or writes. `status=sent`, `complete=true` and exit code 0 confirm consistent delivery records; an empty digest is valid too. Missing records, unfinished claims, inconsistent records and unreadable databases fail the check. A chat marked complete is insufficient evidence. `send-analysis` also returns a `delivery_check` and a nonzero exit code when verification fails. This verifies recorded delivery, not whether group members read the message.
+
+Set the optional `schedule.result_check_time` to add a later check, for example a 10:30 send and a 10:50 read-only check. A normal check stays quiet; missing or abnormal results are reported according to the user's notification preferences. Checks never resend automatically. One heartbeat per chat handles both times using `phase`; omitting the field or setting it to null retains only the check after sending. Draft-only tasks must not require a sent record. Both triggers need the computer and Codex to remain running; this does not guarantee checks while offline.
+
+Updating the Skill does not overwrite existing generated robots. Migrate their code, configuration and scheduled instructions separately while preserving credentials, SQLite history and carryover queues.
 
 ## Safety model
 

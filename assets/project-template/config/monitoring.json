@@ -6,6 +6,7 @@
   "schedule": {
     "timezone": "Asia/Shanghai",
     "cron": "30 10 * * 1-5",
+    "result_check_time": null,
     "weekdays": [1, 2, 3, 4, 5]
   },
   "digest": {

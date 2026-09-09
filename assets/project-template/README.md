@@ -9,6 +9,7 @@
 - 竞品：__COMPETITOR_COUNT__ 个
 __COMPETITOR_LIST__
 - 时间：__SCHEDULE_DESCRIPTION__
+- 结果复核：__RESULT_CHECK_DESCRIPTION__
 - 采集窗口：近 __LOOKBACK_DAYS__ 天
 - 日报格式：__DIGEST_FORMAT_LABEL__，最多 __MAX_ITEMS__ 条
 - 发现来源：__DISCOVERY_SOURCE_LIST__（同级，不设主次）
@@ -128,5 +129,19 @@ PYTHONPATH=src .venv/bin/python -m competitor_monitor_bot.cli send-analysis \
 ```
 
 只有钉钉响应 `errcode=0` 后才会写入 `data/state.sqlite3` 并更新延期队列。同一天重复执行返回 `already_sent`，不会再次发送；已发送文章也会按规范化标题指纹排除。失败会释放本次占位，允许安全重试。
+
+## 结果检查
+
+```bash
+PYTHONPATH=src .venv/bin/python -m competitor_monitor_bot.cli check-result
+```
+
+命令按配置时区读取当天 SQLite 状态，不读取凭据、不联网、不发送，也不会创建缺失数据库。`sent`、`complete=true` 且退出码 0 表示成功记录、发送时间与文章去重记录一致；0 条空日报同样有效。`missing`、`in_progress`、`inconsistent`、`state_unavailable` 返回非零退出码，不能把漏执行、占位未完成或记录异常误判成成功。`not_scheduled` 表示不需要播报，退出码 0 但 `complete=false`。人工可通过 `--date YYYY-MM-DD` 检查历史，自动运行必须使用默认当天。
+
+`send-analysis` 返回前会自动复核持久化结果，并输出 `delivery_check`。当日已发送也须核对真实记录；数据不一致时不自动重发。成功仅表示钉钉接口成功及状态一致，不表示群成员已阅读。
+
+若需要稍后复核整轮漏执行的情况，在确认的规格中设置 `schedule.result_check_time`（同日、晚于播报时间，例如 10:30 播报、10:50 复核）。省略或设为 null 时，只做发送后的检查。`check-result` 的 `phase` 会按检查时刻返回 `delivery` 或 `result_check`；它只提供运行分支信息，不自行创建调度或发送消息。人工明确要求补发时可按完整核验流程执行，不受定时复核时段的限制。
+
+一个会话只支持一个 heartbeat 自动化；将播报与复核放在该自动化中，复核触发只检查并报告，不自动补发。若两个时间跨小时，不要把小时列表与分钟列表直接组合，否则可能产生额外触发；使用平台支持的精确安排，或先确认可表达的复核时间。两次触发均依赖本机开机且 Codex 运行，结果检查不能保证永不漏执行。
 
 首次测试消息和首次正式日报都确认收到后，再在 Codex Desktop 中创建定时任务。自动化每次都必须先核验来源、生成可发送日报，并使用上述受保护命令；不要用系统 `crontab` 保存任何凭据。

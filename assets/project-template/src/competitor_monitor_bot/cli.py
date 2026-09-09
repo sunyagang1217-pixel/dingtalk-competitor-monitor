@@ -20,6 +20,7 @@ from .dispatch import dispatch_analysis
 from .dingtalk import DingTalkClient, DingTalkError, build_markdown_payload
 from .monitoring import MonitoringConfigError, load_monitoring_config
 from .news import CollectionResult, NewsCollectionError, collect_news
+from .result_check import check_delivery_result
 from .state import DigestState, DigestStateError
 
 
@@ -45,6 +46,16 @@ def _parser() -> argparse.ArgumentParser:
     subparsers.add_parser(
         "check-config",
         help="校验本地凭据，但不显示凭据内容。",
+    )
+
+    check_result = subparsers.add_parser(
+        "check-result", help="只读核对当日日报的成功发送记录，不加载凭据、不发送。"
+    )
+    check_result.add_argument("--config", help="可选监控配置路径。")
+    check_result.add_argument("--state", help="可选 SQLite 状态库路径。")
+    check_result.add_argument(
+        "--date", type=date.fromisoformat,
+        help="可选 YYYY-MM-DD，默认检查配置时区当天。",
     )
 
     preview = subparsers.add_parser(
@@ -154,6 +165,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
 
     try:
+        if args.command == "check-result":
+            result = check_delivery_result(
+                load_monitoring_config(args.config),
+                state_path=args.state, digest_date=args.date,
+            )
+            print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+            return result.exit_code
+
         if args.command == "check-config":
             credentials = load_credentials()
             print(
@@ -372,8 +391,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                 client,
                 state_path=args.state,
             )
-            print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
-            return 0
+            checked = check_delivery_result(
+                monitoring, state_path=args.state,
+                digest_date=date.fromisoformat(result.digest_date),
+            )
+            output = result.to_dict()
+            output["delivery_check"] = checked.to_dict()
+            print(json.dumps(output, ensure_ascii=False, indent=2))
+            provider_ok = result.status == "already_sent" or (
+                result.status == "sent" and type(result.errcode) is int and result.errcode == 0
+            )
+            return 0 if provider_ok and checked.complete else 1
 
         if args.confirm != LIVE_SEND_CONFIRMATION:
             print(

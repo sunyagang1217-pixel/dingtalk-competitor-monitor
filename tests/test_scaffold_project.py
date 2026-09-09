@@ -168,6 +168,29 @@ class ScaffoldProjectTests(unittest.TestCase):
         with self.assertRaisesRegex(scaffold_project.SpecError, "非空列表"):
             scaffold_project.validate_spec(empty)
 
+    def test_result_check_time_is_configurable_and_rendered(self) -> None:
+        specification = self._specification()
+        specification["schedule"]["time"] = "09:15"
+        specification["schedule"]["result_check_time"] = "09:35"
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            output = Path(temporary_dir) / "generated-project"
+            scaffold_project.scaffold(scaffold_project.validate_spec(specification), output)
+            monitoring = json.loads((output / "config/monitoring.json").read_text())
+            self.assertEqual(monitoring["schedule"]["result_check_time"], "09:35")
+            self.assertTrue((output / "src/competitor_monitor_bot/result_check.py").is_file())
+
+    def test_omitted_result_check_preserves_existing_schedules(self) -> None:
+        validated = scaffold_project.validate_spec(self._specification())
+        self.assertIsNone(validated["schedule"]["result_check_time"])
+
+    def test_rejects_early_or_invalid_result_check_time(self) -> None:
+        for value in ("10:30", "09:30", "00:10", "25:00", "10:5", False):
+            with self.subTest(value=value):
+                specification = self._specification()
+                specification["schedule"]["result_check_time"] = value
+                with self.assertRaises(scaffold_project.SpecError):
+                    scaffold_project.validate_spec(specification)
+
 
 if __name__ == "__main__":
     unittest.main()
