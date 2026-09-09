@@ -68,7 +68,7 @@
       "region": "domestic",
       "priority": 2,
       "aliases": ["示例竞品"],
-      "query": "\"示例竞品\" __INDUSTRY_NAME__"
+      "query": "\"示例竞品\""
     }
   ]
 }

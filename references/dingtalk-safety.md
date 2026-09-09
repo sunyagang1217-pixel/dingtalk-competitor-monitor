@@ -50,6 +50,8 @@
 
 发送后还须用只读 `check-result` 确认 `complete=true` 和退出码 0。该检查不加载凭据、不联网、不写数据库；缺失、发送中或记录不一致时报告真实状态，不删除占位或改写历史以使检查通过。复核时段本身不授权补发；用户明确要求手动补发可按完整核验流程执行，同日去重仍有效。
 
+用户明确要求当天追加遗漏动态时，可使用 `send-analysis --supplement-id <稳定批次标识> --confirm SEND_TO_DINGTALK`。先用同一标识预览，发送后用 `check-result --supplement-id` 核验；原日报历史保留，补发另行记账，两类文章共同去重。同一批次不可重复，无新文章不发送。自动定时播报与只读复核不得自行创建补发批次。
+
 ## 官方参考
 
 - [钉钉机器人概述](https://open.dingtalk.com/document/orgapp/robot-overview)

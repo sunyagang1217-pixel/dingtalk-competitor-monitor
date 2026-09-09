@@ -57,7 +57,9 @@ PYTHONPATH=src .venv/bin/python -m competitor_monitor_bot.cli collect-json \
   --output data/analysis.json
 ```
 
-Google News、百度和 360 使用竞品查询式；微信公众号搜索使用每个竞品的全部名称与别名，不附加行业词限制，也不限于官方公众号。登录、验证码或安全验证页面不得绕过；单一来源失败会记录脱敏原因并继续，所有启用来源都失败时停止生成日报。
+四类来源都使用每个品牌的名称与全部已确认别名，不附加行业词；公众号不限官方账号。例如“猿编程”本身足够，不再要求同时命中“少儿编程”，海外品牌同样去掉额外的 coding kids 等限制。旧 query 字段的行业词不再用于收窄基础发现。同名噪声和行业相关性在原文核验时判断。登录、验证码或安全验证页面不得绕过；单一来源失败会记录脱敏原因并继续，所有启用来源都失败时停止生成日报。
+
+`collect-json` 保留完整的可审阅候选池，条数可以超过日报上限；原文核验和事件去重后再选最多 __MAX_ITEMS__ 条。人事任免列为高优先级；未经官方确认的媒体报道须明确注明其消息性质。
 
 按照 `config/analysis_prompt.md` 打开每条原始报道、公众号文章、竞品官网或官方公告，删除不可靠或重复内容，校正真实直链、来源、发布时间、日期精度和内容属性，并填写 JSON 中要求的摘要字段。随后校验并预览完整日报：
 
@@ -129,6 +131,8 @@ PYTHONPATH=src .venv/bin/python -m competitor_monitor_bot.cli send-analysis \
 ```
 
 只有钉钉响应 `errcode=0` 后才会写入 `data/state.sqlite3` 并更新延期队列。同一天重复执行返回 `already_sent`，不会再次发送；已发送文章也会按规范化标题指纹排除。失败会释放本次占位，允许安全重试。
+
+如用户明确要求同日追加遗漏动态，在原日报已成功的前提下，重新采集、核验，再以同一个 `--supplement-id` 依次运行 `analysis-preview`、`send-analysis` 与 `check-result`。补发标题标注“补充日报”，使用独立的 supplement_runs/supplement_articles 记录，不修改原日报，文章去重覆盖普通日报与补发。重复批次不再发送；没有新增返回 `no_new_articles` 而不发空补充消息。该参数仅用于用户明确授权的补发，定时任务不自动使用。
 
 ## 结果检查
 

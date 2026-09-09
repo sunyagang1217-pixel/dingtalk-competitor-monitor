@@ -12,6 +12,8 @@ A reusable Codex Skill that guides a user from industry scoping to a verified, d
 - Monitors domestic and global public signals for any industry, not just a fixed competitor list.
 - Collects Google News, Baidu, 360 Search and WeChat public-account search as peer discovery sources.
 - Searches WeChat articles with every competitor name and alias, including mentions from non-official accounts.
+- Uses brand names and confirmed aliases across all four sources without mandatory industry terms; relevance and name ambiguity are checked against the original article.
+- Retains the complete candidate pool for review before applying the final digest limit, and prioritizes personnel changes while preserving uncertainty in unconfirmed reports.
 - Uses search results only for discovery, then requires the original article, public-account post, official page or public notice to be opened and verified.
 - Separates facts from inference and supports both an analysis digest and a concise breaking-news format.
 - Prevents repeated delivery with normalized title fingerprints and SQLite state.
@@ -109,6 +111,8 @@ The command checks today's SQLite records in the configured timezone without cre
 Set the optional `schedule.result_check_time` to add a later check, for example a 10:30 send and a 10:50 read-only check. A normal check stays quiet; missing or abnormal results are reported according to the user's notification preferences. Checks never resend automatically. One heartbeat per chat handles both times using `phase`; omitting the field or setting it to null retains only the check after sending. Draft-only tasks must not require a sent record. Both triggers need the computer and Codex to remain running; this does not guarantee checks while offline.
 
 Updating the Skill does not overwrite existing generated robots. Migrate their code, configuration and scheduled instructions separately while preserving credentials, SQLite history and carryover queues.
+
+When a user explicitly requests a same-day supplement for missed news, use the same `--supplement-id` with `analysis-preview`, `send-analysis` and `check-result`. Supplements have separate delivery records, preserve the primary digest, and share article deduplication across both histories. Retrying the same batch does not resend; no new articles means no supplemental message. Scheduled tasks must not create supplement batches automatically.
 
 ## Safety model
 

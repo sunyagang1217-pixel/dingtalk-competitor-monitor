@@ -183,6 +183,15 @@ class ScaffoldProjectTests(unittest.TestCase):
         validated = scaffold_project.validate_spec(self._specification())
         self.assertIsNone(validated["schedule"]["result_check_time"])
 
+    def test_every_brand_uses_only_names_and_aliases(self) -> None:
+        specification = self._specification()
+        specification["competitors"][0].pop("query")
+        specification["competitors"][1]["query"] += " coding kids training"
+        validated = scaffold_project.validate_spec(specification)
+        for competitor in validated["competitors"]:
+            expected = " OR ".join(f'"{alias}"' for alias in competitor["aliases"])
+            self.assertEqual(competitor["query"], expected)
+
     def test_rejects_early_or_invalid_result_check_time(self) -> None:
         for value in ("10:30", "09:30", "00:10", "25:00", "10:5", False):
             with self.subTest(value=value):

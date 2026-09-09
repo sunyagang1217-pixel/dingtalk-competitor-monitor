@@ -21,6 +21,7 @@ from .dingtalk import DingTalkClient, DingTalkError, build_markdown_payload
 from .monitoring import MonitoringConfigError, load_monitoring_config
 from .news import CollectionResult, NewsCollectionError, collect_news
 from .result_check import check_delivery_result
+from .supplement import validate_supplement_id
 from .state import DigestState, DigestStateError
 
 
@@ -57,6 +58,8 @@ def _parser() -> argparse.ArgumentParser:
         "--date", type=date.fromisoformat,
         help="可选 YYYY-MM-DD，默认检查配置时区当天。",
     )
+
+    check_result.add_argument("--supplement-id", help="检查指定补发批次。")
 
     preview = subparsers.add_parser(
         "preview",
@@ -107,6 +110,8 @@ def _parser() -> argparse.ArgumentParser:
         help="可选监控配置路径，默认使用 config/monitoring.json。",
     )
 
+    analysis_preview.add_argument("--supplement-id", help="预览明确授权的补充日报。")
+
     send = subparsers.add_parser(
         "send",
         help="向已配置的钉钉群发送一条经过确认的消息。",
@@ -139,6 +144,8 @@ def _parser() -> argparse.ArgumentParser:
         help=f"必须精确填写 {LIVE_SEND_CONFIRMATION}。",
     )
 
+    send_analysis.add_argument("--supplement-id", help="仅在用户明确要求同日补发时填写；同一标识幂等。")
+
     record_sent = subparsers.add_parser(
         "record-analysis-sent",
         help="只记录一份已经确认送达的日报，不再次发送。",
@@ -168,7 +175,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "check-result":
             result = check_delivery_result(
                 load_monitoring_config(args.config),
-                state_path=args.state, digest_date=args.date,
+                state_path=args.state, digest_date=args.date, supplement_id=args.supplement_id,
             )
             print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
             return result.exit_code
@@ -320,7 +327,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 required_fingerprints=required_fingerprints,
                 competitors=monitoring.competitors,
             )
-            print(build_analysis_markdown(analyzed, monitoring, now=local_now))
+            markdown = build_analysis_markdown(analyzed, monitoring, now=local_now)
+            if args.supplement_id is not None:
+                validate_supplement_id(args.supplement_id)
+                heading, separator, body = markdown.partition("\n")
+                markdown = heading + "｜补充日报" + separator + body
+            print(markdown)
             return 0
 
         if args.command == "record-analysis-sent":
@@ -390,10 +402,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                 monitoring,
                 client,
                 state_path=args.state,
+                supplement_id=args.supplement_id,
             )
+            if result.status == "no_new_articles":
+                print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+                return 0
             checked = check_delivery_result(
                 monitoring, state_path=args.state,
                 digest_date=date.fromisoformat(result.digest_date),
+                supplement_id=args.supplement_id,
             )
             output = result.to_dict()
             output["delivery_check"] = checked.to_dict()

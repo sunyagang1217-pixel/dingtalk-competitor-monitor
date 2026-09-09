@@ -336,7 +336,9 @@ def load_monitoring_config(path: str | Path | None = None) -> MonitoringConfig:
                 f"竞品 {competitor_id} 的优先级必须是 1 至 5。"
             )
         name = str(entry.get("name", "")).strip()
-        query = str(entry.get("query", "")).strip()
+        query = str(entry.get("query", "")).strip() or " OR ".join(
+            f'"{alias}"' for alias in dict.fromkeys((name, *aliases))
+        )
         if name.casefold() not in {alias.casefold() for alias in aliases}:
             raise MonitoringConfigError(
                 f"竞品 {competitor_id} 的别名必须包含正式名称。"

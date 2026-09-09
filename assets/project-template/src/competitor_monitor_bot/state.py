@@ -42,6 +42,23 @@ class DigestState:
                 digest_date TEXT NOT NULL,
                 sent_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS supplement_runs (
+                digest_date TEXT NOT NULL,
+                supplement_id TEXT NOT NULL,
+                status TEXT NOT NULL CHECK (status IN ('sending', 'sent')),
+                started_at TEXT NOT NULL,
+                sent_at TEXT,
+                article_count INTEGER,
+                PRIMARY KEY (digest_date, supplement_id)
+            );
+            CREATE TABLE IF NOT EXISTS supplement_articles (
+                fingerprint TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                digest_date TEXT NOT NULL,
+                supplement_id TEXT NOT NULL,
+                sent_at TEXT NOT NULL
+            );
             """
         )
         connection.commit()
@@ -63,8 +80,10 @@ class DigestState:
         with closing(self._connect()) as connection, connection:
             rows = connection.execute(
                 f"SELECT fingerprint FROM sent_articles "
+                f"WHERE fingerprint IN ({placeholders}) "
+                f"UNION SELECT fingerprint FROM supplement_articles "
                 f"WHERE fingerprint IN ({placeholders})",
-                unique,
+                unique + unique,
             ).fetchall()
         return {str(row["fingerprint"]) for row in rows}
 

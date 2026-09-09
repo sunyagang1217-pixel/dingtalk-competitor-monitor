@@ -232,7 +232,7 @@ class AnalysisTests(unittest.TestCase):
             required_fingerprints={due.fingerprint},
         )
         selected = {item["fingerprint"] for item in template["articles"]}
-        self.assertEqual(len(selected), 2)
+        self.assertEqual(len(selected), 3)
         self.assertIn(due.fingerprint, selected)
 
 

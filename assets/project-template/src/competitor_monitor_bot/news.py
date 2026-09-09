@@ -69,6 +69,7 @@ DISCOVERY_HOSTS = {
 
 
 CATEGORY_RULES: tuple[tuple[str, tuple[str, ...], int], ...] = (
+    ("人事/组织", ("免去", "免职", "任免", "离职", "任命", "接任", "离任", "辞任", "人事变动", "resigns", "resignation", "appoints"), 7),
     ("融资/经营", ("融资", "营收", "利润", "上市", "收购", "funding", "acquisition"), 6),
     ("法律/合规", ("法院", "裁判", "判决", "纠纷", "退款", "诉讼", "court", "lawsuit", "settlement"), 5),
     ("产品/AI", ("ai", "人工智能", "大模型", "课程", "产品", "发布", "launch"), 5),
@@ -97,31 +98,36 @@ def is_discovery_url(value: str) -> bool:
     return hostname in DISCOVERY_HOSTS
 
 
+def build_keyword_query(competitor: Competitor) -> str:
+    """Discover by brand/aliases; legacy query suffixes must not hide news."""
+    names = dict.fromkeys((competitor.name, *competitor.aliases))
+    return " OR ".join(f'"{name}"' for name in names if name.strip())
+
+
 def build_google_news_url(competitor: Competitor, lookback_days: int) -> str:
     if competitor.region == "domestic":
         locale = "hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
     else:
         locale = "hl=en-US&gl=US&ceid=US:en"
-    query = quote_plus(f"{competitor.query} when:{lookback_days}d")
+    query = quote_plus(f"{build_keyword_query(competitor)} when:{lookback_days}d")
     return f"https://news.google.com/rss/search?q={query}&{locale}"
 
 
 def build_baidu_search_url(competitor: Competitor, lookback_days: int) -> str:
     del lookback_days
-    query = quote_plus(competitor.query)
+    query = quote_plus(build_keyword_query(competitor))
     return f"https://www.baidu.com/s?wd={query}&rn=50"
 
 
 def build_360_search_url(competitor: Competitor, lookback_days: int) -> str:
     del lookback_days
-    query = quote_plus(competitor.query)
+    query = quote_plus(build_keyword_query(competitor))
     return f"https://www.so.com/s?q={query}&pn=1"
 
 
 def build_wechat_search_url(competitor: Competitor, lookback_days: int) -> str:
     del lookback_days
-    alias_query = " OR ".join(f'"{alias}"' for alias in competitor.aliases)
-    query = quote_plus(alias_query)
+    query = quote_plus(build_keyword_query(competitor))
     return f"https://weixin.sogou.com/weixin?type=2&query={query}"
 
 
@@ -129,7 +135,7 @@ def _matches_competitor(title: str, competitor: Competitor) -> bool:
     normalized = unicodedata.normalize("NFKC", title).casefold()
     return any(
         unicodedata.normalize("NFKC", alias).casefold() in normalized
-        for alias in competitor.aliases
+        for alias in (competitor.name, *competitor.aliases)
     )
 
 

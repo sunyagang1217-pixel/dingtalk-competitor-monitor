@@ -7,7 +7,6 @@ from pathlib import Path
 import re
 from typing import Any
 
-from .digest import select_digest_articles
 from .monitoring import Competitor, MonitoringConfig
 from .news import (
     NewsArticle,
@@ -66,10 +65,8 @@ def build_analysis_template(
     remaining = tuple(
         article for article in articles if article.fingerprint not in selected_fingerprints
     )
-    remaining_slots = config.digest.max_items - len(selected_required)
-    selected = selected_required + list(
-        select_digest_articles(remaining, config)[:remaining_slots]
-    )
+    # max_items constrains the verified digest, not the discovery/review pool.
+    selected = selected_required + list(remaining)
     selected = sorted(
         selected,
         key=lambda item: item.published_at,

@@ -77,7 +77,7 @@
 | `schedule.result_check_time` | 可选 `HH:MM`，必须晚于同日播报时间；省略或 null 不增加后续触发，发送后仍执行结果检查 |
 | `schedule.weekdays` | ISO 星期：周一为 1，周日为 7；不可重复 |
 | `digest.format` | `analysis` 为事实摘要加影响判断；`brief` 为事实快讯 |
-| `digest.max_items` | 1-20 |
+| `digest.max_items` | 1-20，仅约束核验后的最终日报，不截断待核验候选池 |
 | `digest.lookback_days` | 1-30 |
 | 地区优先条数 | 两项之和必须等于 `max_items`；未选地区必须为 0 |
 | `sources.enabled` | 非空且不重复；可选 `google_news`、`baidu`、`360`、`wechat_articles`，默认四类全部启用并同级采集 |
@@ -85,9 +85,9 @@
 | `competitor.id` | 唯一、稳定的 ASCII slug |
 | `competitor.priority` | 1-5，5 为最高优先级 |
 | `competitor.aliases` | 至少包含正式名称；加入英文名、旧名、产品名等真实别名 |
-| `competitor.query` | 必须包含至少一个别名，可使用引号和 `OR` 缩小噪声 |
+| `competitor.query` | 可省略的兼容字段；脚手架统一生成品牌名称及别名的 OR 查询，旧字段中的行业限定词不进入基础检索 |
 
-脚手架会把全部四类来源写入 `config/monitoring.json`，未启用的来源保留配置但设为 `enabled: false`。Google News、百度和 360 使用 `competitor.query`；微信公众号搜索忽略其中的行业限定词，改用 `competitor.aliases` 中的全部名称，不限公众号主体类型。
+脚手架会把全部四类来源写入 `config/monitoring.json`，未启用的来源保留配置但设为 `enabled: false`。所有来源统一使用竞品名称与全部已确认别名，不增加行业词限制；已有配置中带行业词的旧 query 也不会收窄基础发现。行业与主体相关性在原文核验时判断，不把同名噪声作为竞品事实。
 
 启用结果复核时，脚手架把 `result_check_time` 写入监控配置，`check-result` 根据该时间输出定时路由 `phase`。脚手架不会创建自动化；由原生工具把用户确认的播报和复核时刻写入同一 heartbeat，避免重复挂载。跨小时的具体表达限制见 `automation-workflow.md`。
 

@@ -9,6 +9,7 @@ from typing import Any
 
 from .monitoring import MonitoringConfig
 from .state import default_state_path
+from .supplement import validate_supplement_id
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,7 @@ class DeliveryCheck:
     phase: str
     sent_at: str | None = None
     article_count: int | None = None
+    supplement_id: str | None = None
 
     @property
     def exit_code(self) -> int:
@@ -36,12 +38,15 @@ def check_delivery_result(
     state_path: str | Path | None = None,
     digest_date: date | None = None,
     now: datetime | None = None,
+    supplement_id: str | None = None,
 ) -> DeliveryCheck:
     """Verify a committed delivery without credentials, network access or writes."""
     zone = config.schedule.zoneinfo()
     local_now = now.astimezone(zone) if now else datetime.now(zone)
     target = digest_date if digest_date is not None else local_now.date()
     target_text = target.isoformat()
+    if supplement_id is not None:
+        validate_supplement_id(supplement_id)
     check_time = config.schedule.result_check_time
     phase = (
         "result_check"
@@ -57,6 +62,7 @@ def check_delivery_result(
             complete=status == "sent",
             message=message,
             phase=phase,
+            supplement_id=supplement_id,
             **details,
         )
 
@@ -70,13 +76,17 @@ def check_delivery_result(
         with closing(sqlite3.connect(uri, uri=True, timeout=5)) as connection:
             connection.row_factory = sqlite3.Row
             connection.execute("BEGIN")
+            run_table = "supplement_runs" if supplement_id is not None else "digest_runs"
+            article_table = "supplement_articles" if supplement_id is not None else "sent_articles"
+            where = "digest_date = ?" + (" AND supplement_id = ?" if supplement_id is not None else "")
+            parameters = (target_text, supplement_id) if supplement_id is not None else (target_text,)
             run = connection.execute(
-                "SELECT status, sent_at, article_count FROM digest_runs WHERE digest_date = ?",
-                (target_text,),
+                f"SELECT status, sent_at, article_count FROM {run_table} WHERE {where}",
+                parameters,
             ).fetchone()
             articles = connection.execute(
-                "SELECT sent_at FROM sent_articles WHERE digest_date = ?",
-                (target_text,),
+                f"SELECT sent_at FROM {article_table} WHERE {where}",
+                parameters,
             ).fetchall()
     except (sqlite3.Error, OSError, ValueError):
         return result("state_unavailable", "无法只读检查发送状态库，不能确认日报已发送。")

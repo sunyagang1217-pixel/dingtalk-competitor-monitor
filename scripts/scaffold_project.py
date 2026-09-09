@@ -353,7 +353,7 @@ def validate_spec(raw: Any) -> dict[str, Any]:
         item = _object(
             value,
             label,
-            required={"id", "name", "region", "priority", "aliases", "query"},
+            required={"id", "name", "region", "priority", "aliases"},
             allowed={"id", "name", "region", "priority", "aliases", "query"},
         )
         competitor_id = _slug(item["id"], f"{label}.id")
@@ -370,9 +370,11 @@ def validate_spec(raw: Any) -> dict[str, Any]:
         aliases = _unique_text_list(item["aliases"], f"{label}.aliases")
         if name.casefold() not in {alias.casefold() for alias in aliases}:
             raise SpecError(f"{label}.aliases 必须包含竞品正式名称。")
-        query = _text(item["query"], f"{label}.query", maximum=300)
-        if not any(alias.casefold() in query.casefold() for alias in aliases):
-            raise SpecError(f"{label}.query 必须包含至少一个竞品别名。")
+        if "query" in item:
+            legacy_query = _text(item["query"], f"{label}.query", maximum=300)
+            if not any(alias.casefold() in legacy_query.casefold() for alias in aliases):
+                raise SpecError(f"{label}.query 必须包含至少一个竞品别名。")
+        query = " OR ".join(f'"{alias}"' for alias in dict.fromkeys((name, *aliases)))
         if competitor_id in seen_ids:
             raise SpecError(f"竞品 id 重复：{competitor_id}。")
         if name.casefold() in seen_names:
