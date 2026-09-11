@@ -8,11 +8,14 @@ A reusable Codex Skill that guides a user from industry scoping to a verified, d
 
 ## What it does
 
-- Defines the industry boundary, regions, topics, competitors, aliases and priorities through a guided conversation.
+- Defines the industry boundary, regions, topics, competitors, brand aliases, related entities and priorities through a guided conversation.
 - Monitors domestic and global public signals for any industry, not just a fixed competitor list.
-- Collects Google News, Baidu, 360 Search and WeChat public-account search as peer discovery sources.
-- Searches WeChat articles with every competitor name and alias, including mentions from non-official accounts.
-- Uses brand names and confirmed aliases across all four sources without mandatory industry terms; relevance and name ambiguity are checked against the original article.
+- Collects Google News, Bing, Baidu, 360 Search and WeChat public-account search as peer discovery sources.
+- Searches WeChat articles with every competitor name, alias and confirmed related entity, including mentions from non-official accounts, and fetches three pages by default.
+- Uses brand names, confirmed aliases, parent companies, operating entities and responsible people across all five sources without mandatory industry terms. Related-entity-only titles require context that links the entity to the brand.
+- Records success, failure, blocking, partial success or non-applicability for every brand and source, including candidate counts, page counts and sanitized errors.
+- Keeps candidates whose search snippets have no date, but requires the real publication date to be verified from the original source.
+- Allows an empty digest only after every critical brand meets the minimum source coverage. With all five sources enabled, the default is at least three successful sources for brands with priority 3 or higher.
 - Retains the complete candidate pool for review before applying the final digest limit, and prioritizes personnel changes while preserving uncertainty in unconfirmed reports.
 - Uses search results only for discovery, then requires the original article, public-account post, official page or public notice to be opened and verified.
 - Separates facts from inference and supports both an analysis digest and a concise breaking-news format.
@@ -28,8 +31,8 @@ A reusable Codex Skill that guides a user from industry scoping to a verified, d
 
 | Stage | Outcome |
 | --- | --- |
-| 1. Scope | Confirm the industry, regions, competitors, aliases, priorities, schedule and digest format. |
-| 2. Generate | Create a Python project with four-source collection, verification, carryover, sending, deduplication and tests. |
+| 1. Scope | Confirm the industry, regions, competitors, aliases, related entities, priorities, source coverage, schedule and digest format. |
+| 2. Generate | Create a Python project with five-source collection, per-brand source status, verification, carryover, sending, deduplication and tests. |
 | 3. Configure | Validate the DingTalk Webhook and signing secret in a friendly Chinese terminal flow. |
 | 4. Verify | Preview and explicitly approve one connection test and one analyzed digest. |
 | 5. Automate | Schedule weekday or weekly runs in Codex Desktop, either as drafts or authorized sends. |
@@ -80,11 +83,11 @@ The scaffolded project includes:
 
 | Component | Purpose |
 | --- | --- |
-| `config/monitoring.json` | Industry scope, competitors, aliases, priorities, regions and schedule. |
+| `config/monitoring.json` | Industry scope, competitors, aliases, related entities, priorities, regions, pagination and coverage thresholds. |
 | `config/analysis_prompt.md` | Original-source verification and digest-writing rules. |
 | `src/competitor_monitor_bot/result_check.py` | Read-only checks of the digest date, send timestamp and recorded article count, without credentials or sending. |
 | `data/pending_articles.json` | Verified important items intentionally deferred to a future digest. |
-| `src/competitor_monitor_bot/` | Four-source collection, analysis, carryover, DingTalk signing, dispatch and SQLite state. |
+| `src/competitor_monitor_bot/` | Five-source collection, per-brand source status, analysis, carryover, DingTalk signing, dispatch and SQLite state. |
 | `scripts/configure_dingtalk.sh` | Chinese credential setup and validation wizard. |
 | `tests/` | Unit tests for configuration, signing, analysis, collection, dispatch and deduplication. |
 
@@ -98,7 +101,7 @@ PYTHONPATH=src .venv/bin/python -m competitor_monitor_bot.cli analysis-preview \
   --input data/analysis.json
 ```
 
-`collect-json` records enabled sources, successful sources and sanitized failure reasons. Search timestamps and content types remain explicitly unverified until corrected from the original source, so raw candidates cannot pass `analysis-preview`. These commands do not send DingTalk messages; real sends remain protected by explicit confirmation in the guided workflow.
+`collect-json` records enabled sources, every brand/source attempt, critical-brand coverage and sanitized failure reasons. A candidate without a search date is retained with `published_at_precision: "missing"`; every candidate remains unverified until its real source, date and content type are corrected from the original, so raw candidates cannot pass `analysis-preview`. These commands do not send DingTalk messages; real sends remain protected by explicit confirmation in the guided workflow.
 
 ## Verify delivery results
 
@@ -106,7 +109,7 @@ PYTHONPATH=src .venv/bin/python -m competitor_monitor_bot.cli analysis-preview \
 PYTHONPATH=src .venv/bin/python -m competitor_monitor_bot.cli check-result
 ```
 
-The command checks today's SQLite records in the configured timezone without credentials, network requests or writes. `status=sent`, `complete=true` and exit code 0 confirm consistent delivery records; an empty digest is valid too. Missing records, unfinished claims, inconsistent records and unreadable databases fail the check. A chat marked complete is insufficient evidence. `send-analysis` also returns a `delivery_check` and a nonzero exit code when verification fails. This verifies recorded delivery, not whether group members read the message.
+The command checks today's SQLite records in the configured timezone without credentials, network requests or writes. `status=sent`, `complete=true` and exit code 0 confirm consistent delivery records; an empty digest is valid only when every critical brand met its configured minimum source coverage. Missing records, unfinished claims, inconsistent records and unreadable databases fail the check. A chat marked complete is insufficient evidence. `send-analysis` also returns a `delivery_check` and a nonzero exit code when verification fails. This verifies recorded delivery, not whether group members read the message.
 
 Set the optional `schedule.result_check_time` to add a later check, for example a 10:30 send and a 10:50 read-only check. A normal check stays quiet; missing or abnormal results are reported according to the user's notification preferences. Checks never resend automatically. One heartbeat per chat handles both times using `phase`; omitting the field or setting it to null retains only the check after sending. Draft-only tasks must not require a sent record. Both triggers need the computer and Codex to remain running; this does not guarantee checks while offline.
 
@@ -119,7 +122,8 @@ When a user explicitly requests a same-day supplement for missed news, use the s
 | Boundary | Behavior |
 | --- | --- |
 | Credentials | Never request or store Webhooks, tokens or signing secrets in chat, files, screenshots, logs or Git. |
-| Sources | Treat all four sources as peers and never bypass login or security checks. Stop when every source fails instead of sending a false empty digest. |
+| Sources | Treat all five sources as peers and never bypass login or security checks. Record every brand/source attempt and stop when every source fails. |
+| Empty digest | Every critical brand must meet the configured number of fully successful sources; `partial` does not count as full success. |
 | Verification | Remove unreadable, out-of-window or unsupported claims; record the real public-account name and content type. |
 | Content | Separate facts from interpretation, label brand claims, and identify the nature and subject of court or regulatory notices. |
 | Carryover | Reverify every due item and never silently remove it; mark it `sent` only after DingTalk succeeds. |

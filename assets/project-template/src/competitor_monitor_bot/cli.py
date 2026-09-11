@@ -272,6 +272,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 ],
                 "successful_sources": list(collection.successful_sources),
                 "source_errors": list(collection.errors),
+                "source_attempts": [
+                    attempt.to_dict() for attempt in collection.source_attempts
+                ],
+                "coverage": (
+                    collection.coverage.to_dict()
+                    if collection.coverage is not None
+                    else None
+                ),
             }
             template["carryover"] = {
                 "enabled": monitoring.carryover.enabled,
@@ -293,6 +301,28 @@ def main(argv: Sequence[str] | None = None) -> int:
                             "source_errors": len(collection.errors),
                             "source_failures": list(collection.errors),
                             "successful_sources": list(collection.successful_sources),
+                            "critical_brand_coverage": (
+                                [
+                                    {
+                                        "competitor": item.competitor_name,
+                                        "successful_sources": len(
+                                            item.successful_sources
+                                        ),
+                                        "required_sources": (
+                                            item.minimum_successful_sources
+                                        ),
+                                        "met": item.met,
+                                    }
+                                    for item in collection.coverage.critical_competitors
+                                ]
+                                if collection.coverage is not None
+                                else []
+                            ),
+                            "empty_digest_allowed": (
+                                collection.coverage.empty_digest_allowed
+                                if collection.coverage is not None
+                                else False
+                            ),
                             "carryover_due": len(due_fingerprints),
                             "carryover_reconciled": reconciled_carryover,
                         },
@@ -326,6 +356,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 lookback_days=monitoring.digest.lookback_days,
                 required_fingerprints=required_fingerprints,
                 competitors=monitoring.competitors,
+                monitoring_config=monitoring,
             )
             markdown = build_analysis_markdown(analyzed, monitoring, now=local_now)
             if args.supplement_id is not None:
@@ -354,6 +385,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 max_items=monitoring.digest.max_items,
                 lookback_days=monitoring.digest.lookback_days,
                 competitors=monitoring.competitors,
+                monitoring_config=monitoring,
             )
             state = DigestState(args.state)
             state.record_confirmed_send(

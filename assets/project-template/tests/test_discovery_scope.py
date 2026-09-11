@@ -7,7 +7,7 @@ from unittest.mock import patch
 from competitor_monitor_bot.analysis import build_analysis_template
 from competitor_monitor_bot.monitoring import Competitor, load_monitoring_config
 from competitor_monitor_bot.news import (
-    build_google_news_url, build_baidu_search_url, build_360_search_url,
+    build_google_news_url, build_bing_search_url, build_baidu_search_url, build_360_search_url,
     build_wechat_search_url, collect_news, parse_google_news_feed, title_fingerprint,
 )
 
@@ -24,7 +24,8 @@ class KeywordDiscoveryTests(unittest.TestCase):
             expected = " OR ".join(f'"{alias}"' for alias in aliases)
             for build, field in (
                 (build_google_news_url, "q"), (build_baidu_search_url, "wd"),
-                (build_360_search_url, "q"), (build_wechat_search_url, "query"),
+                (build_bing_search_url, "q"), (build_360_search_url, "q"),
+                (build_wechat_search_url, "query"),
             ):
                 with self.subTest(name=name, source=build.__name__):
                     query = parse_qs(urlsplit(build(competitor, 7)).query)[field][0]

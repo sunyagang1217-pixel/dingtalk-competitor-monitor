@@ -26,6 +26,13 @@
         "regions": ["domestic", "international"]
       },
       {
+        "id": "bing",
+        "name": "必应搜索",
+        "enabled": true,
+        "scope": "国内+海外",
+        "regions": ["domestic", "international"]
+      },
+      {
         "id": "baidu",
         "name": "百度搜索",
         "enabled": true,
@@ -44,9 +51,14 @@
         "name": "微信公众号搜索",
         "enabled": true,
         "scope": "国内+海外，所有提及竞品的公众号文章",
-        "regions": ["domestic", "international"]
+        "regions": ["domestic", "international"],
+        "pages": 3
       }
     ],
+    "coverage": {
+      "critical_priority_min": 3,
+      "minimum_successful_sources": 3
+    },
     "verification": {
       "require_original": true,
       "allow_official_public_notices": true,
@@ -66,9 +78,10 @@
       "id": "sample-competitor",
       "name": "示例竞品",
       "region": "domestic",
-      "priority": 2,
+      "priority": 3,
       "aliases": ["示例竞品"],
-      "query": "\"示例竞品\""
+      "related_entities": ["示例竞品母公司", "示例竞品负责人"],
+      "query": "\"示例竞品\" OR \"示例竞品母公司\" OR \"示例竞品负责人\""
     }
   ]
 }

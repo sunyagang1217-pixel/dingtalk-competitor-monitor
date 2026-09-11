@@ -87,6 +87,7 @@ def dispatch_analysis(
         lookback_days=config.digest.lookback_days,
         required_fingerprints=due_fingerprints - previously_sent_due,
         competitors=config.competitors,
+        monitoring_config=config,
     )
     sent_fingerprints = state.sent_fingerprints(
         item.article.fingerprint for item in analyzed
@@ -97,6 +98,17 @@ def dispatch_analysis(
     skipped = len(analyzed) - len(fresh)
     if supplement_id is not None and not fresh:
         return DispatchResult("no_new_articles", digest_date, 0, skipped, supplement_id=supplement_id)
+    if not fresh:
+        load_analysis_document(
+            input_path,
+            digest_format=config.digest.format,
+            max_items=config.digest.max_items,
+            lookback_days=config.digest.lookback_days,
+            required_fingerprints=due_fingerprints - previously_sent_due,
+            competitors=config.competitors,
+            monitoring_config=config,
+            require_empty_digest_coverage=True,
+        )
 
     if not state.claim_run(digest_date, local_now):
         status = state.run_status(digest_date)

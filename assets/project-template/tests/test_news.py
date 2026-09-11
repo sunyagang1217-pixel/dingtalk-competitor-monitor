@@ -10,9 +10,13 @@ from competitor_monitor_bot.monitoring import Competitor, load_monitoring_config
 from competitor_monitor_bot.news import (
     NewsCollectionError,
     NewsArticle,
+    SourceFetchResult,
+    build_bing_search_url,
     build_wechat_search_url,
     classify_title,
     collect_news,
+    fetch_wechat_news,
+    parse_bing_feed,
     parse_360_search,
     parse_baidu_search,
     parse_google_news_feed,
@@ -36,6 +40,26 @@ SAMPLE_RSS = """<?xml version="1.0" encoding="UTF-8"?>
     <source url="https://example.com">示例网</source>
   </item>
 </channel></rss>""".encode("utf-8")
+
+SAMPLE_BING_RSS = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>示例科技负责人调整</title>
+    <link>https://example.com/leadership</link>
+    <description>示例科技公布负责人变动。</description>
+    <pubDate>周二, 01 9月 2026 10:30:00 GMT</pubDate>
+  </item>
+</channel></rss>""".encode("utf-8")
+
+SAMPLE_BAIDU_NO_DATE = """
+<html><head><title>百度搜索</title></head><body>
+<div class="result c-container">
+  <h3 class="t"><a href="https://example.com/no-date">示例科技负责人调整</a></h3>
+  <div class="c-abstract">示例科技公布负责人变动，搜索摘要没有日期。</div>
+  <span class="c-showurl">example.com</span>
+</div>
+</body></html>
+"""
 
 SAMPLE_BAIDU = """
 <html><head><title>百度搜索</title></head><body>
@@ -96,6 +120,17 @@ class NewsTests(unittest.TestCase):
         self.assertEqual(articles[0].published_at_precision, "candidate")
         self.assertEqual(articles[0].content_type, "unverified")
 
+    def test_parses_bing_rss_with_chinese_publication_date(self) -> None:
+        articles = parse_bing_feed(
+            SAMPLE_BING_RSS,
+            self.competitor,
+            now=datetime(2026, 9, 2, tzinfo=timezone.utc),
+        )
+        self.assertEqual(len(articles), 1)
+        self.assertEqual(articles[0].published_at.isoformat(), "2026-09-01T10:30:00+00:00")
+        self.assertEqual(articles[0].published_at_precision, "candidate")
+        self.assertIn("format=rss", build_bing_search_url(self.competitor, 7))
+
     def test_title_fingerprint_ignores_spacing_and_punctuation(self) -> None:
         self.assertEqual(
             title_fingerprint("示例科技：AI 产品"),
@@ -148,6 +183,40 @@ class NewsTests(unittest.TestCase):
         self.assertEqual(articles[0].source, "example.com")
         self.assertEqual(articles[0].published_at.date().isoformat(), "2026-09-01")
 
+    def test_keeps_search_candidate_when_summary_has_no_date(self) -> None:
+        now = datetime(2026, 9, 2, 3, 0, tzinfo=timezone.utc)
+        articles = parse_baidu_search(
+            SAMPLE_BAIDU_NO_DATE,
+            self.competitor,
+            now=now,
+        )
+        self.assertEqual(len(articles), 1)
+        self.assertEqual(articles[0].published_at, now)
+        self.assertEqual(articles[0].published_at_precision, "missing")
+
+    def test_related_entity_requires_brand_relationship_context(self) -> None:
+        competitor = Competitor(
+            id="example-tech",
+            name="示例科技",
+            region="domestic",
+            priority=3,
+            aliases=("示例科技",),
+            query='"示例科技"',
+            related_entities=("李明",),
+        )
+        html = """
+        <div class="result c-container">
+          <h3><a href="https://example.com/related">李明辞任负责人</a></h3>
+          <div class="c-abstract">李明此前担任示例科技业务负责人。</div>
+        </div>
+        <div class="result c-container">
+          <h3><a href="https://example.com/noise">李明参加公开活动</a></h3>
+          <div class="c-abstract">活动讨论与教育行业无关的话题。</div>
+        </div>
+        """
+        articles = parse_baidu_search(html, competitor)
+        self.assertEqual([item.title for item in articles], ["李明辞任负责人"])
+
     def test_parses_360_search_direct_url(self) -> None:
         articles = parse_360_search(
             SAMPLE_360,
@@ -169,6 +238,34 @@ class NewsTests(unittest.TestCase):
         self.assertEqual(articles[0].source_url, "https://weixin.sogou.com")
         self.assertEqual(articles[0].published_at.date().isoformat(), "2026-09-01")
 
+    def test_wechat_fetches_configured_pages_and_reports_partial_results(self) -> None:
+        calls: list[str] = []
+
+        def fetch(url, timeout_seconds):
+            del timeout_seconds
+            calls.append(url)
+            if "page=2" in url:
+                raise NewsCollectionError("请求失败：URLError")
+            return SAMPLE_WECHAT.encode("utf-8")
+
+        with patch(
+            "competitor_monitor_bot.news._fetch_source_page",
+            side_effect=fetch,
+        ):
+            result = fetch_wechat_news(
+                self.competitor,
+                7,
+                pages=3,
+                now=datetime(2026, 9, 2, tzinfo=timezone.utc),
+            )
+
+        self.assertIsInstance(result, SourceFetchResult)
+        self.assertEqual(result.status, "partial")
+        self.assertEqual(result.pages_attempted, 2)
+        self.assertEqual(result.pages_succeeded, 1)
+        self.assertEqual(len(result.articles), 1)
+        self.assertEqual(len(calls), 2)
+
     def test_rejects_baidu_security_verification_page(self) -> None:
         with self.assertRaises(NewsCollectionError):
             parse_baidu_search(
@@ -184,10 +281,12 @@ class NewsTests(unittest.TestCase):
             priority=3,
             aliases=("示例科技", "Example Tech"),
             query='"示例科技" OR "Example Tech" 行业培训',
+            related_entities=("示例集团", "示例负责人"),
         )
         url = build_wechat_search_url(competitor, 7)
         self.assertIn("%E7%A4%BA%E4%BE%8B%E7%A7%91%E6%8A%80", url)
         self.assertIn("Example+Tech", url)
+        self.assertIn("%E7%A4%BA%E4%BE%8B%E9%9B%86%E5%9B%A2", url)
         self.assertNotIn("%E8%A1%8C%E4%B8%9A%E5%9F%B9%E8%AE%AD", url)
 
     def test_collects_all_enabled_sources_without_source_priority(self) -> None:
@@ -222,9 +321,13 @@ class NewsTests(unittest.TestCase):
         self.assertEqual(calls, expected_calls)
         self.assertEqual(
             result.successful_sources,
-            ("google_news", "baidu", "360", "wechat_articles"),
+            ("google_news", "bing", "baidu", "360", "wechat_articles"),
         )
         self.assertEqual(result.errors, ())
+        self.assertEqual(len(result.source_attempts), len(expected_calls))
+        self.assertTrue(all(item.status == "success" for item in result.source_attempts))
+        self.assertIsNotNone(result.coverage)
+        self.assertTrue(result.coverage.empty_digest_allowed)
 
     def test_one_failed_source_does_not_block_other_sources(self) -> None:
         config = load_monitoring_config()
@@ -246,9 +349,70 @@ class NewsTests(unittest.TestCase):
 
         self.assertEqual(
             result.successful_sources,
-            ("google_news", "360", "wechat_articles"),
+            ("google_news", "bing", "360", "wechat_articles"),
         )
         self.assertEqual(len(result.errors), 1)
+
+    def test_blocked_source_marks_remaining_brands_without_more_requests(self) -> None:
+        from dataclasses import replace
+
+        config = load_monitoring_config()
+        second = replace(
+            self.competitor,
+            id="second-tech",
+            name="第二科技",
+            aliases=("第二科技",),
+            query='"第二科技"',
+        )
+        config = replace(config, competitors=(self.competitor, second))
+        baidu_calls: list[str] = []
+
+        def fake_fetch(source_id, competitor, lookback_days, **kwargs):
+            del lookback_days, kwargs
+            if source_id == "baidu":
+                baidu_calls.append(competitor.id)
+                raise NewsCollectionError("百度搜索返回安全验证页面。")
+            return []
+
+        with patch(
+            "competitor_monitor_bot.news.fetch_source_news",
+            side_effect=fake_fetch,
+        ):
+            result = collect_news(
+                config,
+                now=datetime(2026, 9, 2, tzinfo=timezone.utc),
+            )
+
+        self.assertEqual(baidu_calls, [self.competitor.id])
+        baidu_attempts = [
+            item for item in result.source_attempts if item.source_id == "baidu"
+        ]
+        self.assertEqual(len(baidu_attempts), 2)
+        self.assertTrue(all(item.status == "blocked" for item in baidu_attempts))
+
+    def test_empty_digest_coverage_requires_three_full_sources(self) -> None:
+        config = load_monitoring_config()
+
+        def collect_with(successful: set[str]):
+            def fake_fetch(source_id, competitor, lookback_days, **kwargs):
+                del competitor, lookback_days, kwargs
+                if source_id not in successful:
+                    raise NewsCollectionError("请求失败：URLError")
+                return []
+
+            with patch(
+                "competitor_monitor_bot.news.fetch_source_news",
+                side_effect=fake_fetch,
+            ):
+                return collect_news(
+                    config,
+                    now=datetime(2026, 9, 2, tzinfo=timezone.utc),
+                )
+
+        enough = collect_with({"google_news", "bing", "360"})
+        insufficient = collect_with({"google_news", "bing"})
+        self.assertTrue(enough.coverage.empty_digest_allowed)
+        self.assertFalse(insufficient.coverage.empty_digest_allowed)
 
     def test_duplicate_title_prefers_direct_article_without_source_priority(self) -> None:
         config = load_monitoring_config()
@@ -318,7 +482,12 @@ class NewsTests(unittest.TestCase):
             )
 
         self.assertFalse(result.has_successful_source)
-        self.assertEqual(len(result.errors), 4)
+        expected_failures = sum(
+            source.enabled and source.supports(competitor)
+            for source in config.discovery_sources
+            for competitor in config.competitors
+        )
+        self.assertEqual(len(result.errors), expected_failures)
         with self.assertRaisesRegex(NewsCollectionError, "所有配置采集来源均失败"):
             _require_collection_success(result)
 

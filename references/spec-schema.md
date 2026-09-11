@@ -38,7 +38,12 @@
     "preferred_international_items": 2
   },
   "sources": {
-    "enabled": ["google_news", "baidu", "360", "wechat_articles"]
+    "enabled": ["google_news", "bing", "baidu", "360", "wechat_articles"],
+    "wechat_pages": 3,
+    "coverage": {
+      "critical_priority_min": 3,
+      "minimum_successful_sources": 3
+    }
   },
   "carryover": {
     "enabled": true
@@ -50,7 +55,8 @@
       "region": "domestic",
       "priority": 5,
       "aliases": ["示例科技", "示例科技公司"],
-      "query": "\"示例科技\" OR \"示例科技公司\""
+      "related_entities": ["示例科技集团", "示例负责人"],
+      "query": "\"示例科技\" OR \"示例科技公司\" OR \"示例科技集团\" OR \"示例负责人\""
     },
     {
       "id": "example-labs",
@@ -80,14 +86,20 @@
 | `digest.max_items` | 1-20，仅约束核验后的最终日报，不截断待核验候选池 |
 | `digest.lookback_days` | 1-30 |
 | 地区优先条数 | 两项之和必须等于 `max_items`；未选地区必须为 0 |
-| `sources.enabled` | 非空且不重复；可选 `google_news`、`baidu`、`360`、`wechat_articles`，默认四类全部启用并同级采集 |
+| `sources.enabled` | 非空且不重复；可选 `google_news`、`bing`、`baidu`、`360`、`wechat_articles`，默认五类全部启用并同级采集 |
+| `sources.wechat_pages` | 1-5，默认 3；仅微信公众号搜索支持翻页 |
+| `sources.coverage.critical_priority_min` | 1-5，达到该优先级的品牌视为关键品牌；默认 3 |
+| `sources.coverage.minimum_successful_sources` | 1 至已启用来源数；五源默认 3，关键品牌达到该值才允许空日报 |
 | `carryover.enabled` | 是否生成并使用延期候选队列；默认 `true` |
 | `competitor.id` | 唯一、稳定的 ASCII slug |
 | `competitor.priority` | 1-5，5 为最高优先级 |
 | `competitor.aliases` | 至少包含正式名称；加入英文名、旧名、产品名等真实别名 |
-| `competitor.query` | 可省略的兼容字段；脚手架统一生成品牌名称及别名的 OR 查询，旧字段中的行业限定词不进入基础检索 |
+| `competitor.related_entities` | 可选；经确认的母公司、运营主体、创始人和负责人等关联检索词，不与品牌别名混用 |
+| `competitor.query` | 可省略的兼容字段；脚手架统一生成品牌名称、别名及关联主体的 OR 查询，旧字段中的行业限定词不进入基础检索 |
 
-脚手架会把全部四类来源写入 `config/monitoring.json`，未启用的来源保留配置但设为 `enabled: false`。所有来源统一使用竞品名称与全部已确认别名，不增加行业词限制；已有配置中带行业词的旧 query 也不会收窄基础发现。行业与主体相关性在原文核验时判断，不把同名噪声作为竞品事实。
+脚手架会把全部五类来源写入 `config/monitoring.json`，未启用的来源保留配置但设为 `enabled: false`。所有来源统一使用竞品名称、全部已确认别名和关联主体，不增加行业词限制；已有配置中带行业词的旧 query 也不会收窄基础发现。标题只命中关联主体时，搜索摘要或上下文还必须建立其与品牌的关系。搜索摘要没有日期的候选仍进入核验池，但必须从原文校正日期。行业与主体相关性在原文核验时判断，不把同名噪声作为竞品事实。
+
+`collect-json` 会记录逐品牌逐来源状态。空日报只有在所有关键品牌均达到 `minimum_successful_sources` 时才通过预览；微信公众号只完成部分页时状态为 `partial`，不计为完整成功。
 
 启用结果复核时，脚手架把 `result_check_time` 写入监控配置，`check-result` 根据该时间输出定时路由 `phase`。脚手架不会创建自动化；由原生工具把用户确认的播报和复核时刻写入同一 heartbeat，避免重复挂载。跨小时的具体表达限制见 `automation-workflow.md`。
 

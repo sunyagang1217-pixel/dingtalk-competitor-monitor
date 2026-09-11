@@ -39,10 +39,87 @@ class NewsArticle:
 
 
 @dataclass(frozen=True)
+class SourceFetchResult:
+    articles: tuple[NewsArticle, ...]
+    status: str = "success"
+    pages_attempted: int = 1
+    pages_succeeded: int = 1
+    errors: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class SourceAttempt:
+    source_id: str
+    source_name: str
+    competitor_id: str
+    competitor_name: str
+    status: str
+    candidate_count: int
+    pages_attempted: int
+    pages_succeeded: int
+    error: str = ""
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "source_id": self.source_id,
+            "source_name": self.source_name,
+            "competitor_id": self.competitor_id,
+            "competitor_name": self.competitor_name,
+            "status": self.status,
+            "candidate_count": self.candidate_count,
+            "pages_attempted": self.pages_attempted,
+            "pages_succeeded": self.pages_succeeded,
+            "error": self.error,
+        }
+
+
+@dataclass(frozen=True)
+class BrandCoverage:
+    competitor_id: str
+    competitor_name: str
+    successful_sources: tuple[str, ...]
+    applicable_sources: tuple[str, ...]
+    minimum_successful_sources: int
+    met: bool
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "competitor_id": self.competitor_id,
+            "competitor_name": self.competitor_name,
+            "successful_sources": list(self.successful_sources),
+            "successful_source_count": len(self.successful_sources),
+            "applicable_sources": list(self.applicable_sources),
+            "applicable_source_count": len(self.applicable_sources),
+            "minimum_successful_sources": self.minimum_successful_sources,
+            "met": self.met,
+        }
+
+
+@dataclass(frozen=True)
+class CoverageReport:
+    critical_priority_min: int
+    minimum_successful_sources: int
+    critical_competitors: tuple[BrandCoverage, ...]
+    empty_digest_allowed: bool
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "critical_priority_min": self.critical_priority_min,
+            "minimum_successful_sources": self.minimum_successful_sources,
+            "critical_competitors": [
+                item.to_dict() for item in self.critical_competitors
+            ],
+            "empty_digest_allowed": self.empty_digest_allowed,
+        }
+
+
+@dataclass(frozen=True)
 class CollectionResult:
     articles: tuple[NewsArticle, ...]
     errors: tuple[str, ...]
     successful_sources: tuple[str, ...] = ()
+    source_attempts: tuple[SourceAttempt, ...] = ()
+    coverage: CoverageReport | None = None
 
     @property
     def has_successful_source(self) -> bool:
@@ -61,6 +138,8 @@ VERIFIED_CONTENT_TYPES = {
 
 DISCOVERY_HOSTS = {
     "news.google.com",
+    "bing.com",
+    "www.bing.com",
     "www.baidu.com",
     "m.baidu.com",
     "www.so.com",
@@ -99,8 +178,10 @@ def is_discovery_url(value: str) -> bool:
 
 
 def build_keyword_query(competitor: Competitor) -> str:
-    """Discover by brand/aliases; legacy query suffixes must not hide news."""
-    names = dict.fromkeys((competitor.name, *competitor.aliases))
+    """Discover by brand, aliases and confirmed related entities."""
+    names = dict.fromkeys(
+        (competitor.name, *competitor.aliases, *competitor.related_entities)
+    )
     return " OR ".join(f'"{name}"' for name in names if name.strip())
 
 
@@ -111,6 +192,12 @@ def build_google_news_url(competitor: Competitor, lookback_days: int) -> str:
         locale = "hl=en-US&gl=US&ceid=US:en"
     query = quote_plus(f"{build_keyword_query(competitor)} when:{lookback_days}d")
     return f"https://news.google.com/rss/search?q={query}&{locale}"
+
+
+def build_bing_search_url(competitor: Competitor, lookback_days: int) -> str:
+    del lookback_days
+    query = quote_plus(build_keyword_query(competitor))
+    return f"https://www.bing.com/search?format=rss&q={query}"
 
 
 def build_baidu_search_url(competitor: Competitor, lookback_days: int) -> str:
@@ -125,18 +212,40 @@ def build_360_search_url(competitor: Competitor, lookback_days: int) -> str:
     return f"https://www.so.com/s?q={query}&pn=1"
 
 
-def build_wechat_search_url(competitor: Competitor, lookback_days: int) -> str:
+def build_wechat_search_url(
+    competitor: Competitor,
+    lookback_days: int,
+    *,
+    page: int = 1,
+) -> str:
     del lookback_days
     query = quote_plus(build_keyword_query(competitor))
-    return f"https://weixin.sogou.com/weixin?type=2&query={query}"
+    return f"https://weixin.sogou.com/weixin?type=2&query={query}&page={page}"
 
 
-def _matches_competitor(title: str, competitor: Competitor) -> bool:
-    normalized = unicodedata.normalize("NFKC", title).casefold()
-    return any(
-        unicodedata.normalize("NFKC", alias).casefold() in normalized
-        for alias in (competitor.name, *competitor.aliases)
-    )
+def _normalised(value: str) -> str:
+    return unicodedata.normalize("NFKC", value).casefold()
+
+
+def _contains_term(value: str, terms: tuple[str, ...]) -> bool:
+    normalized = _normalised(value)
+    return any(_normalised(term) in normalized for term in terms if term.strip())
+
+
+def _matches_competitor(
+    title: str,
+    competitor: Competitor,
+    *,
+    context: str = "",
+) -> bool:
+    brand_terms = tuple(dict.fromkeys((competitor.name, *competitor.aliases)))
+    if _contains_term(title, brand_terms):
+        return True
+    if not competitor.related_entities or not _contains_term(
+        title, competitor.related_entities
+    ):
+        return False
+    return _contains_term(f"{title} {context}", brand_terms)
 
 
 def _as_utc(value: datetime | None = None) -> datetime:
@@ -149,14 +258,54 @@ def _as_utc(value: datetime | None = None) -> datetime:
 def _parse_published(value: str) -> datetime:
     try:
         parsed = parsedate_to_datetime(value)
-    except (TypeError, ValueError) as exc:
-        raise NewsCollectionError("新闻条目的发布时间无效。") from exc
+    except (TypeError, ValueError):
+        clean = _clean_text(value)
+        try:
+            parsed = datetime.fromisoformat(clean.replace("Z", "+00:00"))
+        except ValueError:
+            bing_zh = re.search(
+                r"(?<!\d)(\d{1,2})\s+(\d{1,2})月\s+(20\d{2})"
+                r"(?:\s+(\d{1,2}):(\d{2}):(\d{2}))?",
+                clean,
+            )
+            if bing_zh:
+                day, month, year, hour, minute, second = bing_zh.groups()
+                try:
+                    return datetime(
+                        int(year),
+                        int(month),
+                        int(day),
+                        int(hour or 0),
+                        int(minute or 0),
+                        int(second or 0),
+                        tzinfo=timezone.utc,
+                    )
+                except ValueError:
+                    raise NewsCollectionError("新闻条目的发布时间无效。") from None
+            match = re.search(
+                r"(?<!\d)(20\d{2})\s*[年./-]\s*(\d{1,2})\s*[月./-]\s*(\d{1,2})\s*日?",
+                clean,
+            )
+            if not match:
+                raise NewsCollectionError("新闻条目的发布时间无效。") from None
+            try:
+                parsed = datetime(
+                    *(int(part) for part in match.groups()),
+                    tzinfo=timezone.utc,
+                )
+            except ValueError:
+                raise NewsCollectionError("新闻条目的发布时间无效。") from None
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
 
 
-def parse_google_news_feed(xml_data: bytes, competitor: Competitor) -> list[NewsArticle]:
+def parse_google_news_feed(
+    xml_data: bytes,
+    competitor: Competitor,
+    *,
+    now: datetime | None = None,
+) -> list[NewsArticle]:
     try:
         root = ET.fromstring(xml_data)
     except ET.ParseError as exc:
@@ -174,15 +323,22 @@ def parse_google_news_feed(xml_data: bytes, competitor: Competitor) -> list[News
             if source_node is not None
             else ""
         )
-        if not raw_title or not url or not published:
+        description = _clean_text(
+            re.sub(r"<[^>]+>", " ", item.findtext("description") or "")
+        )
+        if not raw_title or not url:
             continue
-        if not _matches_competitor(raw_title, competitor):
+        if not _matches_competitor(raw_title, competitor, context=description):
             continue
 
-        try:
-            published_at = _parse_published(published)
-        except NewsCollectionError:
-            continue
+        published_at = _as_utc(now)
+        published_at_precision = "missing"
+        if published:
+            try:
+                published_at = _parse_published(published)
+                published_at_precision = "candidate"
+            except NewsCollectionError:
+                pass
         title = raw_title
         source_suffix = f" - {source}" if source else ""
         if source_suffix and title.endswith(source_suffix):
@@ -201,6 +357,61 @@ def parse_google_news_feed(xml_data: bytes, competitor: Competitor) -> list[News
                 published_at=published_at,
                 category=category,
                 fingerprint=title_fingerprint(title),
+                published_at_precision=published_at_precision,
+            )
+        )
+    return articles
+
+
+def parse_bing_feed(
+    xml_data: bytes,
+    competitor: Competitor,
+    *,
+    now: datetime | None = None,
+) -> list[NewsArticle]:
+    try:
+        root = ET.fromstring(xml_data)
+    except ET.ParseError as exc:
+        raise NewsCollectionError("必应搜索返回了无效的 RSS XML。") from exc
+
+    articles: list[NewsArticle] = []
+    for item in root.findall("./channel/item"):
+        title = _clean_text(item.findtext("title") or "")
+        url = _clean_text(item.findtext("link") or "")
+        description = _clean_text(
+            re.sub(r"<[^>]+>", " ", item.findtext("description") or "")
+        )
+        published = _clean_text(item.findtext("pubDate") or "")
+        if not title or not url:
+            continue
+        if not _matches_competitor(title, competitor, context=description):
+            continue
+
+        published_at = _as_utc(now)
+        published_at_precision = "missing"
+        if published:
+            try:
+                published_at = _parse_published(published)
+                published_at_precision = "candidate"
+            except NewsCollectionError:
+                pass
+        source_url = _origin_url(url) or "https://www.bing.com"
+        source = _source_label(source_url) or "必应搜索"
+        category, _ = classify_title(title)
+        articles.append(
+            NewsArticle(
+                competitor_id=competitor.id,
+                competitor_name=competitor.name,
+                region=competitor.region,
+                priority=competitor.priority,
+                title=title,
+                url=url,
+                source=source,
+                source_url=source_url,
+                published_at=published_at,
+                category=category,
+                fingerprint=title_fingerprint(title),
+                published_at_precision=published_at_precision,
             )
         )
     return articles
@@ -584,7 +795,21 @@ def _articles_from_search_results(
     articles: list[NewsArticle] = []
     for result in results:
         title = _clean_text(result.title)
-        if not title or not _matches_competitor(title, competitor):
+        context = " ".join(
+            value
+            for value in (
+                result.snippet,
+                result.publisher,
+                result.source_text,
+                result.raw_text,
+            )
+            if value
+        )
+        if not title or not _matches_competitor(
+            title,
+            competitor,
+            context=context,
+        ):
             continue
         url = _normalise_url(result.direct_url or result.url, base_url)
         if not url:
@@ -599,8 +824,10 @@ def _articles_from_search_results(
             ),
             None,
         )
+        published_at_precision = "candidate"
         if published_at is None:
-            continue
+            published_at = _as_utc(now)
+            published_at_precision = "missing"
         if source_id == "wechat_articles":
             source = result.publisher or "微信公众号"
             source_url = "https://weixin.sogou.com"
@@ -626,6 +853,7 @@ def _articles_from_search_results(
                 published_at=published_at,
                 category=category,
                 fingerprint=title_fingerprint(title),
+                published_at_precision=published_at_precision,
             )
         )
     return articles
@@ -715,11 +943,26 @@ def fetch_competitor_news(
     *,
     timeout_seconds: int = 20,
     now: datetime | None = None,
+    pages: int = 1,
 ) -> list[NewsArticle]:
+    del pages
     url = build_google_news_url(competitor, lookback_days)
     xml_data = _fetch_source_page(url, timeout_seconds)
-    del now
-    return parse_google_news_feed(xml_data, competitor)
+    return parse_google_news_feed(xml_data, competitor, now=now)
+
+
+def fetch_bing_news(
+    competitor: Competitor,
+    lookback_days: int,
+    *,
+    timeout_seconds: int = 20,
+    now: datetime | None = None,
+    pages: int = 1,
+) -> list[NewsArticle]:
+    del pages
+    url = build_bing_search_url(competitor, lookback_days)
+    xml_data = _fetch_source_page(url, timeout_seconds)
+    return parse_bing_feed(xml_data, competitor, now=now)
 
 
 def fetch_baidu_news(
@@ -728,7 +971,9 @@ def fetch_baidu_news(
     *,
     timeout_seconds: int = 20,
     now: datetime | None = None,
+    pages: int = 1,
 ) -> list[NewsArticle]:
+    del pages
     url = build_baidu_search_url(competitor, lookback_days)
     html_data = _fetch_source_page(url, timeout_seconds)
     return parse_baidu_search(html_data, competitor, now=now)
@@ -740,7 +985,9 @@ def fetch_360_news(
     *,
     timeout_seconds: int = 20,
     now: datetime | None = None,
+    pages: int = 1,
 ) -> list[NewsArticle]:
+    del pages
     url = build_360_search_url(competitor, lookback_days)
     html_data = _fetch_source_page(url, timeout_seconds)
     return parse_360_search(html_data, competitor, now=now)
@@ -752,10 +999,32 @@ def fetch_wechat_news(
     *,
     timeout_seconds: int = 20,
     now: datetime | None = None,
-) -> list[NewsArticle]:
-    url = build_wechat_search_url(competitor, lookback_days)
-    html_data = _fetch_source_page(url, timeout_seconds)
-    return parse_wechat_search(html_data, competitor, now=now)
+    pages: int = 1,
+) -> SourceFetchResult:
+    articles: list[NewsArticle] = []
+    errors: list[str] = []
+    pages_succeeded = 0
+    pages_attempted = 0
+    for page in range(1, pages + 1):
+        pages_attempted += 1
+        url = build_wechat_search_url(competitor, lookback_days, page=page)
+        try:
+            html_data = _fetch_source_page(url, timeout_seconds)
+            articles.extend(parse_wechat_search(html_data, competitor, now=now))
+        except NewsCollectionError as exc:
+            errors.append(f"第 {page} 页：{exc}")
+            if page == 1:
+                raise
+            break
+        pages_succeeded += 1
+    status = "success" if pages_succeeded == pages else "partial"
+    return SourceFetchResult(
+        articles=tuple(articles),
+        status=status,
+        pages_attempted=pages_attempted,
+        pages_succeeded=pages_succeeded,
+        errors=tuple(errors),
+    )
 
 
 fetch_baidu_search = fetch_baidu_news
@@ -770,9 +1039,11 @@ def fetch_source_news(
     *,
     timeout_seconds: int = 20,
     now: datetime | None = None,
-) -> list[NewsArticle]:
+    pages: int = 1,
+) -> SourceFetchResult:
     fetchers = {
         "google_news": fetch_competitor_news,
+        "bing": fetch_bing_news,
         "baidu": fetch_baidu_news,
         "360": fetch_360_news,
         "wechat_articles": fetch_wechat_news,
@@ -780,12 +1051,16 @@ def fetch_source_news(
     fetcher = fetchers.get(source_id)
     if fetcher is None:
         raise NewsCollectionError(f"不支持的采集来源：{source_id}")
-    return fetcher(
+    result = fetcher(
         competitor,
         lookback_days,
         timeout_seconds=timeout_seconds,
         now=now,
+        pages=pages,
     )
+    if isinstance(result, SourceFetchResult):
+        return result
+    return SourceFetchResult(articles=tuple(result))
 
 
 def _article_rank(article: NewsArticle) -> tuple[int, int, datetime]:
@@ -814,6 +1089,13 @@ def _default_sources() -> tuple[DiscoverySource, ...]:
             regions=("domestic", "international"),
         ),
         DiscoverySource(
+            id="bing",
+            name="必应搜索",
+            enabled=True,
+            scope="国内+海外",
+            regions=("domestic", "international"),
+        ),
+        DiscoverySource(
             id="baidu",
             name="百度搜索",
             enabled=True,
@@ -833,6 +1115,7 @@ def _default_sources() -> tuple[DiscoverySource, ...]:
             enabled=True,
             scope="国内+海外，所有提及竞品的公众号文章",
             regions=("domestic", "international"),
+            pages=3,
         ),
     )
 
@@ -848,6 +1131,72 @@ def _is_within_window(
     return lower_bound <= published <= upper_bound
 
 
+def _coerce_fetch_result(
+    value: SourceFetchResult | list[NewsArticle] | tuple[NewsArticle, ...],
+) -> SourceFetchResult:
+    if isinstance(value, SourceFetchResult):
+        return value
+    return SourceFetchResult(articles=tuple(value))
+
+
+def _is_blocking_error(message: str) -> bool:
+    return any(
+        marker in message
+        for marker in ("安全验证", "验证码", "访问过于频繁", "异常请求")
+    )
+
+
+def _build_coverage_report(
+    config: MonitoringConfig,
+    attempts: tuple[SourceAttempt, ...],
+    sources: tuple[DiscoverySource, ...],
+) -> CoverageReport:
+    critical_competitors = tuple(
+        competitor
+        for competitor in config.competitors
+        if competitor.priority >= config.coverage.critical_priority_min
+    )
+    brand_reports: list[BrandCoverage] = []
+    for competitor in critical_competitors:
+        applicable_sources = tuple(
+            source.id
+            for source in sources
+            if source.enabled and source.supports(competitor)
+        )
+        successful_sources = tuple(
+            source_id
+            for source_id in applicable_sources
+            if any(
+                attempt.competitor_id == competitor.id
+                and attempt.source_id == source_id
+                and attempt.status == "success"
+                for attempt in attempts
+            )
+        )
+        brand_reports.append(
+            BrandCoverage(
+                competitor_id=competitor.id,
+                competitor_name=competitor.name,
+                successful_sources=successful_sources,
+                applicable_sources=applicable_sources,
+                minimum_successful_sources=(
+                    config.coverage.minimum_successful_sources
+                ),
+                met=(
+                    len(successful_sources)
+                    >= config.coverage.minimum_successful_sources
+                ),
+            )
+        )
+    return CoverageReport(
+        critical_priority_min=config.coverage.critical_priority_min,
+        minimum_successful_sources=config.coverage.minimum_successful_sources,
+        critical_competitors=tuple(brand_reports),
+        empty_digest_allowed=bool(brand_reports)
+        and all(item.met for item in brand_reports),
+    )
+
+
 def collect_news(
     config: MonitoringConfig,
     *,
@@ -858,51 +1207,120 @@ def collect_news(
     deduplicated: dict[str, NewsArticle] = {}
     errors: list[str] = []
     successful_sources: list[str] = []
+    source_attempts: list[SourceAttempt] = []
     configured_sources = getattr(config, "discovery_sources", ()) or _default_sources()
     competitors = sorted(config.competitors, key=lambda item: item.priority, reverse=True)
 
     for source in configured_sources:
-        if not source.enabled:
-            continue
-        source_succeeded = False
-        source_errors: set[str] = set()
+        source_usable = False
+        source_blocked = False
+        blocking_reason = ""
         for competitor in competitors:
-            if not source.supports(competitor):
+            if not source.enabled or not source.supports(competitor):
+                source_attempts.append(
+                    SourceAttempt(
+                        source_id=source.id,
+                        source_name=source.name,
+                        competitor_id=competitor.id,
+                        competitor_name=competitor.name,
+                        status="not_applicable",
+                        candidate_count=0,
+                        pages_attempted=0,
+                        pages_succeeded=0,
+                        error=("来源未启用" if not source.enabled else "地区不适用"),
+                    )
+                )
+                continue
+            if source_blocked:
+                source_attempts.append(
+                    SourceAttempt(
+                        source_id=source.id,
+                        source_name=source.name,
+                        competitor_id=competitor.id,
+                        competitor_name=competitor.name,
+                        status="blocked",
+                        candidate_count=0,
+                        pages_attempted=0,
+                        pages_succeeded=0,
+                        error=blocking_reason,
+                    )
+                )
                 continue
             try:
-                source_articles = fetch_source_news(
-                    source.id,
-                    competitor,
-                    config.digest.lookback_days,
-                    timeout_seconds=timeout_seconds,
-                    now=current,
+                fetched = _coerce_fetch_result(
+                    fetch_source_news(
+                        source.id,
+                        competitor,
+                        config.digest.lookback_days,
+                        timeout_seconds=timeout_seconds,
+                        now=current,
+                        pages=source.pages,
+                    )
                 )
             except NewsCollectionError as exc:
-                source_errors.add(str(exc))
-                if "安全验证" in str(exc) or "验证码" in str(exc):
-                    break
+                message = str(exc)
+                status = "blocked" if _is_blocking_error(message) else "failed"
+                source_attempts.append(
+                    SourceAttempt(
+                        source_id=source.id,
+                        source_name=source.name,
+                        competitor_id=competitor.id,
+                        competitor_name=competitor.name,
+                        status=status,
+                        candidate_count=0,
+                        pages_attempted=1,
+                        pages_succeeded=0,
+                        error=message,
+                    )
+                )
+                errors.append(f"{source.name} / {competitor.name}：{message}")
+                if status == "blocked":
+                    source_blocked = True
+                    blocking_reason = "此前查询触发安全验证，已停止该来源后续请求。"
                 continue
-            source_succeeded = True
-            for article in source_articles:
-                if not _is_within_window(
+            retained_articles: list[NewsArticle] = []
+            for article in fetched.articles:
+                if article.published_at_precision != "missing" and not _is_within_window(
                     article.published_at,
                     current,
                     config.digest.lookback_days,
                 ):
                     continue
+                retained_articles.append(article)
                 existing = deduplicated.get(article.fingerprint)
                 if existing is None or _deduplication_rank(
                     article
                 ) > _deduplication_rank(existing):
                     deduplicated[article.fingerprint] = article
-        if source_succeeded:
+            source_attempts.append(
+                SourceAttempt(
+                    source_id=source.id,
+                    source_name=source.name,
+                    competitor_id=competitor.id,
+                    competitor_name=competitor.name,
+                    status=fetched.status,
+                    candidate_count=len(retained_articles),
+                    pages_attempted=fetched.pages_attempted,
+                    pages_succeeded=fetched.pages_succeeded,
+                    error="；".join(fetched.errors),
+                )
+            )
+            if fetched.status in {"success", "partial"}:
+                source_usable = True
+            for message in fetched.errors:
+                errors.append(f"{source.name} / {competitor.name}：{message}")
+            if any(_is_blocking_error(message) for message in fetched.errors):
+                source_blocked = True
+                blocking_reason = "此前查询触发安全验证，已停止该来源后续请求。"
+        if source_usable:
             successful_sources.append(source.id)
-        for error in sorted(source_errors):
-            errors.append(f"{source.name}：{error}")
 
     articles = tuple(sorted(deduplicated.values(), key=_article_rank, reverse=True))
+    attempts = tuple(source_attempts)
     return CollectionResult(
         articles=articles,
         errors=tuple(errors),
         successful_sources=tuple(successful_sources),
+        source_attempts=attempts,
+        coverage=_build_coverage_report(config, attempts, configured_sources),
     )

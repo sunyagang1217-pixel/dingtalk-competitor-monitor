@@ -199,9 +199,74 @@ class AnalysisTests(unittest.TestCase):
         with self.assertRaisesRegex(AnalysisError, "至少一个配置来源采集成功"):
             load_analysis_document(path)
 
-        template["collection"] = {"successful_sources": ["baidu"]}
+        template["collection"] = {
+            "successful_sources": ["google_news", "bing", "baidu"],
+            "coverage": {
+                "empty_digest_allowed": True,
+                "critical_competitors": [
+                    {
+                        "competitor_id": "example-tech",
+                        "successful_source_count": 3,
+                        "minimum_successful_sources": 3,
+                        "met": True,
+                    }
+                ],
+            },
+        }
         path.write_text(json.dumps(template, ensure_ascii=False), encoding="utf-8")
         self.assertEqual(load_analysis_document(path), ())
+
+        template["collection"]["coverage"]["empty_digest_allowed"] = False
+        template["collection"]["coverage"]["critical_competitors"][0]["met"] = False
+        path.write_text(json.dumps(template, ensure_ascii=False), encoding="utf-8")
+        with self.assertRaisesRegex(AnalysisError, "最低来源覆盖率"):
+            load_analysis_document(path)
+
+    def test_empty_digest_recomputes_coverage_from_source_attempts(self) -> None:
+        template = build_analysis_template(
+            (),
+            self.config,
+            now=datetime(2026, 8, 28, 2, 30, tzinfo=timezone.utc),
+        )
+        competitor = next(
+            item
+            for item in self.config.competitors
+            if item.priority >= self.config.coverage.critical_priority_min
+        )
+        sources = [
+            source.id
+            for source in self.config.discovery_sources
+            if source.enabled and source.supports(competitor)
+        ]
+        template["collection"] = {
+            "successful_sources": sources,
+            "source_attempts": [
+                {
+                    "source_id": source_id,
+                    "competitor_id": competitor.id,
+                    "status": "success" if index < 2 else "failed",
+                }
+                for index, source_id in enumerate(sources)
+            ],
+            "coverage": {
+                "critical_priority_min": self.config.coverage.critical_priority_min,
+                "minimum_successful_sources": self.config.coverage.minimum_successful_sources,
+                "empty_digest_allowed": True,
+                "critical_competitors": [
+                    {
+                        "successful_source_count": len(sources),
+                        "minimum_successful_sources": self.config.coverage.minimum_successful_sources,
+                        "met": True,
+                    }
+                ],
+            },
+        }
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        path = Path(temp_dir.name) / "forged-coverage.json"
+        path.write_text(json.dumps(template, ensure_ascii=False), encoding="utf-8")
+        with self.assertRaisesRegex(AnalysisError, "仅有 2 个来源完整成功"):
+            load_analysis_document(path, monitoring_config=self.config)
 
     def test_due_carryover_is_not_displaced_by_newer_candidates(self) -> None:
         limited_config = replace(

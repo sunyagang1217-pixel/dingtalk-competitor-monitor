@@ -32,7 +32,7 @@ class MonitoringConfigTests(unittest.TestCase):
         self.assertTrue(first.query)
         self.assertEqual(
             tuple(source.id for source in config.discovery_sources if source.enabled),
-            ("google_news", "baidu", "360", "wechat_articles"),
+            ("google_news", "bing", "baidu", "360", "wechat_articles"),
         )
         self.assertTrue(
             all(
@@ -44,6 +44,20 @@ class MonitoringConfigTests(unittest.TestCase):
         self.assertTrue(config.verification.allow_official_public_notices)
         self.assertTrue(config.carryover.reverify_before_send)
         self.assertEqual(config.carryover.path.name, "pending_articles.json")
+        self.assertEqual(config.coverage.critical_priority_min, 3)
+        self.assertEqual(config.coverage.minimum_successful_sources, 3)
+        self.assertIsInstance(first.related_entities, tuple)
+        self.assertTrue(
+            all(entity in first.query for entity in first.related_entities)
+        )
+        self.assertEqual(
+            next(
+                source.pages
+                for source in config.discovery_sources
+                if source.id == "wechat_articles"
+            ),
+            3,
+        )
 
     def _write_config(self, mutate) -> Path:
         document = json.loads(default_config_path().read_text(encoding="utf-8"))

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title description">
   <title id="title">DingTalk Competitor Monitor Skill workflow</title>
-  <desc id="description">A bilingual four-stage workflow using four peer discovery sources, original-source verification, carryover review and safe DingTalk delivery.</desc>
+  <desc id="description">A bilingual four-stage workflow using five peer discovery sources, per-brand coverage checks, original-source verification, carryover review and safe DingTalk delivery.</desc>
   <defs>
     <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
       <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#172033" flood-opacity="0.08"/>
@@ -60,8 +60,8 @@
     <text class="item" x="116" y="417">Industry and regions</text>
     <text class="item-muted" x="116" y="440">行业边界、国内与海外范围</text>
     <circle cx="101" cy="473" r="4" fill="#2563EB"/>
-    <text class="item" x="116" y="479">Competitors and aliases</text>
-    <text class="item-muted" x="116" y="502">竞品、别名与优先级</text>
+    <text class="item" x="116" y="479">Brands + related entities</text>
+    <text class="item-muted" x="116" y="502">品牌别名、关联主体与优先级</text>
     <circle cx="101" cy="535" r="4" fill="#2563EB"/>
     <text class="item" x="116" y="541">Schedule and digest format</text>
 
@@ -78,18 +78,18 @@
       <path d="M23 23 l10 10"/>
       <path d="M10 15 h10 M15 10 v10" opacity="0.5"/>
     </g>
-    <text class="stage-en" x="467" y="326">Collect four peer sources</text>
-    <text class="stage-zh" x="467" y="354">四类来源同级采集</text>
+    <text class="stage-en" x="467" y="326">Collect five peer sources</text>
+    <text class="stage-zh" x="467" y="354">五类来源同级采集</text>
     <line x1="467" y1="378" x2="753" y2="378" stroke="#E7ECF2"/>
     <circle cx="476" cy="411" r="4" fill="#0F9D7A"/>
-    <text class="item" x="491" y="417">Google News + Baidu</text>
-    <text class="item-muted" x="491" y="440">Google News + 百度搜索</text>
+    <text class="item" x="491" y="417">Google News + Bing</text>
+    <text class="item-muted" x="491" y="440">Google News + 必应搜索</text>
     <circle cx="476" cy="473" r="4" fill="#0F9D7A"/>
-    <text class="item" x="491" y="479">360 Search + WeChat</text>
-    <text class="item-muted" x="491" y="502">360搜索 + 公众号文章搜索</text>
+    <text class="item" x="491" y="479">Baidu + 360 + WeChat</text>
+    <text class="item-muted" x="491" y="502">百度 + 360 + 公众号搜索</text>
     <circle cx="476" cy="535" r="4" fill="#0F9D7A"/>
-    <text class="item" x="491" y="541">All competitor aliases</text>
-    <text class="item-muted" x="491" y="562">所有竞品和别名统一检索</text>
+    <text class="item" x="491" y="541">Per-brand source coverage</text>
+    <text class="item-muted" x="491" y="562">逐品牌状态与空日报门槛</text>
 
     <!-- Stage 3 -->
     <line x1="785" y1="396" x2="807" y2="396" stroke="#8B98A9" stroke-width="3" marker-end="url(#arrow)"/>
@@ -134,8 +134,8 @@
     <text class="stage-zh" x="1217" y="354">预览确认后安全播报</text>
     <line x1="1217" y1="378" x2="1503" y2="378" stroke="#E7ECF2"/>
     <circle cx="1226" cy="411" r="4" fill="#E04961"/>
-    <text class="item" x="1241" y="417">Stop when all sources fail</text>
-    <text class="item-muted" x="1241" y="440">全来源失败不发送空日报</text>
+    <text class="item" x="1241" y="417">Critical-brand coverage gate</text>
+    <text class="item-muted" x="1241" y="440">关键品牌覆盖不足不发空日报</text>
     <circle cx="1226" cy="473" r="4" fill="#E04961"/>
     <text class="item" x="1241" y="479">Preview target, body, mentions</text>
     <text class="item-muted" x="1241" y="502">目标、全文与 @ 行为确认</text>

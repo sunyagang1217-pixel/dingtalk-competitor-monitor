@@ -74,6 +74,34 @@ class DispatchTests(unittest.TestCase):
         template["articles"][0]["impact"] = (
             "值得关注该产品定位是否带动同类企业调整功能与服务策略。"
         )
+        enabled_sources = [
+            source.id
+            for source in self.config.discovery_sources
+            if source.enabled
+        ]
+        template["collection"] = {
+            "successful_sources": enabled_sources,
+            "source_attempts": [
+                {
+                    "source_id": source_id,
+                    "competitor_id": competitor.id,
+                    "status": "success",
+                }
+                for source_id in enabled_sources
+            ],
+            "coverage": {
+                "critical_priority_min": 3,
+                "minimum_successful_sources": 3,
+                "empty_digest_allowed": True,
+                "critical_competitors": [
+                    {
+                        "successful_source_count": len(enabled_sources),
+                        "minimum_successful_sources": 3,
+                        "met": True,
+                    }
+                ],
+            },
+        }
         self.analysis_path.write_text(
             json.dumps(template, ensure_ascii=False), encoding="utf-8"
         )

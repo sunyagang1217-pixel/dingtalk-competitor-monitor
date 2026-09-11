@@ -50,16 +50,16 @@ DINGTALK_SECRET
 
 ## 采集与分析预览
 
-由配置中启用的 Google News、百度搜索、360 搜索和微信公众号搜索同级采集公开线索并生成待核验 JSON，不会读取钉钉凭据或发送消息：
+由配置中启用的 Google News、必应搜索、百度搜索、360 搜索和微信公众号搜索同级采集公开线索并生成待核验 JSON，不会读取钉钉凭据或发送消息：
 
 ```bash
 PYTHONPATH=src .venv/bin/python -m competitor_monitor_bot.cli collect-json \
   --output data/analysis.json
 ```
 
-四类来源都使用每个品牌的名称与全部已确认别名，不附加行业词；公众号不限官方账号。例如“猿编程”本身足够，不再要求同时命中“少儿编程”，海外品牌同样去掉额外的 coding kids 等限制。旧 query 字段的行业词不再用于收窄基础发现。同名噪声和行业相关性在原文核验时判断。登录、验证码或安全验证页面不得绕过；单一来源失败会记录脱敏原因并继续，所有启用来源都失败时停止生成日报。
+五类来源都使用每个品牌的名称、全部已确认别名和 `related_entities`，不附加行业词；公众号不限官方账号并按配置翻页。例如“猿编程”本身足够，不再要求同时命中“少儿编程”，海外品牌同样去掉额外的 coding kids 等限制。标题只命中母公司或负责人时，摘要还必须建立其与品牌的关系。旧 query 字段的行业词不再用于收窄基础发现。同名噪声和行业相关性在原文核验时判断。登录、验证码或安全验证页面不得绕过。
 
-`collect-json` 保留完整的可审阅候选池，条数可以超过日报上限；原文核验和事件去重后再选最多 __MAX_ITEMS__ 条。人事任免列为高优先级；未经官方确认的媒体报道须明确注明其消息性质。
+`collect-json` 保留完整的可审阅候选池，条数可以超过日报上限；搜索摘要没有日期的候选也会保留并标记 `published_at_precision: "missing"`。输出同时记录每个品牌在每个来源的状态、候选数、翻页数、脱敏错误与关键品牌覆盖结果。原文核验和事件去重后再选最多 __MAX_ITEMS__ 条。人事任免列为高优先级；未经官方确认的媒体报道须明确注明其消息性质。
 
 按照 `config/analysis_prompt.md` 打开每条原始报道、公众号文章、竞品官网或官方公告，删除不可靠或重复内容，校正真实直链、来源、发布时间、日期精度和内容属性，并填写 JSON 中要求的摘要字段。随后校验并预览完整日报：
 
@@ -68,7 +68,7 @@ PYTHONPATH=src .venv/bin/python -m competitor_monitor_bot.cli analysis-preview \
   --input data/analysis.json
 ```
 
-未填必填字段、仍标记为未核验、标题与指纹不一致、非 HTTPS 链接、原文日期超窗、重复报道或超出条数上限时，校验会失败。只有至少一个来源成功且所有候选经原文核验后被排除，才允许生成空日报。
+未填必填字段、仍标记为未核验、标题与指纹不一致、非 HTTPS 链接、原文日期超窗、重复报道或超出条数上限时，校验会失败。空日报只有在每个关键品牌达到配置的最低完整成功来源数时才允许；`partial` 不计为完整成功。
 
 ## 延期重要动态
 
@@ -140,7 +140,7 @@ PYTHONPATH=src .venv/bin/python -m competitor_monitor_bot.cli send-analysis \
 PYTHONPATH=src .venv/bin/python -m competitor_monitor_bot.cli check-result
 ```
 
-命令按配置时区读取当天 SQLite 状态，不读取凭据、不联网、不发送，也不会创建缺失数据库。`sent`、`complete=true` 且退出码 0 表示成功记录、发送时间与文章去重记录一致；0 条空日报同样有效。`missing`、`in_progress`、`inconsistent`、`state_unavailable` 返回非零退出码，不能把漏执行、占位未完成或记录异常误判成成功。`not_scheduled` 表示不需要播报，退出码 0 但 `complete=false`。人工可通过 `--date YYYY-MM-DD` 检查历史，自动运行必须使用默认当天。
+命令按配置时区读取当天 SQLite 状态，不读取凭据、不联网、不发送，也不会创建缺失数据库。`sent`、`complete=true` 且退出码 0 表示成功记录、发送时间与文章去重记录一致；0 条空日报还必须在发送前满足关键品牌覆盖门槛。`missing`、`in_progress`、`inconsistent`、`state_unavailable` 返回非零退出码，不能把漏执行、占位未完成或记录异常误判成成功。`not_scheduled` 表示不需要播报，退出码 0 但 `complete=false`。人工可通过 `--date YYYY-MM-DD` 检查历史，自动运行必须使用默认当天。
 
 `send-analysis` 返回前会自动复核持久化结果，并输出 `delivery_check`。当日已发送也须核对真实记录；数据不一致时不自动重发。成功仅表示钉钉接口成功及状态一致，不表示群成员已阅读。
 

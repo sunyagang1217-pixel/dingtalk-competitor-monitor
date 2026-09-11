@@ -42,6 +42,7 @@ class ScaffoldProjectTests(unittest.TestCase):
             "sources": {
                 "enabled": [
                     "google_news",
+                    "bing",
                     "baidu",
                     "360",
                     "wechat_articles",
@@ -55,6 +56,7 @@ class ScaffoldProjectTests(unittest.TestCase):
                     "region": "domestic",
                     "priority": 5,
                     "aliases": ["示例教育", "示例课堂"],
+                    "related_entities": ["示例教育集团", "示例负责人"],
                     "query": '"示例教育" OR "示例课堂" 职业培训',
                 },
                 {
@@ -68,7 +70,7 @@ class ScaffoldProjectTests(unittest.TestCase):
             ],
         }
 
-    def test_generates_four_peer_sources_and_carryover_queue(self) -> None:
+    def test_generates_five_peer_sources_coverage_and_carryover_queue(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
             output = Path(temporary_dir) / "generated-project"
             validated = scaffold_project.validate_spec(self._specification())
@@ -82,7 +84,7 @@ class ScaffoldProjectTests(unittest.TestCase):
             sources = monitoring["sources"]["discovery"]
             self.assertEqual(
                 [source["id"] for source in sources if source["enabled"]],
-                ["google_news", "baidu", "360", "wechat_articles"],
+                ["google_news", "bing", "baidu", "360", "wechat_articles"],
             )
             self.assertTrue(
                 all(
@@ -97,6 +99,21 @@ class ScaffoldProjectTests(unittest.TestCase):
                     for source in sources
                     if source["id"] == "wechat_articles"
                 ),
+            )
+            self.assertEqual(
+                next(
+                    source["pages"]
+                    for source in sources
+                    if source["id"] == "wechat_articles"
+                ),
+                3,
+            )
+            self.assertEqual(
+                monitoring["sources"]["coverage"],
+                {
+                    "critical_priority_min": 3,
+                    "minimum_successful_sources": 3,
+                },
             )
             self.assertTrue(monitoring["carryover"]["enabled"])
             self.assertEqual(
@@ -116,7 +133,7 @@ class ScaffoldProjectTests(unittest.TestCase):
             prompt = (output / "config" / "analysis_prompt.md").read_text(
                 encoding="utf-8"
             )
-            self.assertIn("Google News、百度搜索、360搜索、微信公众号搜索", readme)
+            self.assertIn("Google News、必应搜索、百度搜索、360搜索、微信公众号搜索", readme)
             self.assertIn("均为同级发现渠道", prompt)
             self.assertNotRegex(readme + prompt, r"__[A-Z0-9_]+__")
 
@@ -142,6 +159,7 @@ class ScaffoldProjectTests(unittest.TestCase):
             enabled,
             {
                 "google_news": False,
+                "bing": False,
                 "baidu": True,
                 "360": False,
                 "wechat_articles": True,
@@ -183,13 +201,17 @@ class ScaffoldProjectTests(unittest.TestCase):
         validated = scaffold_project.validate_spec(self._specification())
         self.assertIsNone(validated["schedule"]["result_check_time"])
 
-    def test_every_brand_uses_only_names_and_aliases(self) -> None:
+    def test_every_brand_uses_names_aliases_and_related_entities(self) -> None:
         specification = self._specification()
         specification["competitors"][0].pop("query")
         specification["competitors"][1]["query"] += " coding kids training"
         validated = scaffold_project.validate_spec(specification)
         for competitor in validated["competitors"]:
-            expected = " OR ".join(f'"{alias}"' for alias in competitor["aliases"])
+            terms = (
+                *competitor["aliases"],
+                *competitor.get("related_entities", []),
+            )
+            expected = " OR ".join(f'"{term}"' for term in dict.fromkeys(terms))
             self.assertEqual(competitor["query"], expected)
 
     def test_rejects_early_or_invalid_result_check_time(self) -> None:

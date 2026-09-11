@@ -14,6 +14,7 @@ class MonitoringConfigError(RuntimeError):
 
 SUPPORTED_DISCOVERY_SOURCES = {
     "google_news",
+    "bing",
     "baidu",
     "360",
     "wechat_articles",
@@ -28,6 +29,7 @@ class Competitor:
     priority: int
     aliases: tuple[str, ...]
     query: str
+    related_entities: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -37,6 +39,7 @@ class DiscoverySource:
     enabled: bool
     scope: str
     regions: tuple[str, ...]
+    pages: int = 1
 
     def supports(self, competitor: Competitor) -> bool:
         return competitor.region in self.regions
@@ -57,6 +60,12 @@ class CarryoverSettings:
     path: Path
     reverify_before_send: bool
     send_after_next_scheduled_run: bool
+
+
+@dataclass(frozen=True)
+class CoverageSettings:
+    critical_priority_min: int
+    minimum_successful_sources: int
 
 
 @dataclass(frozen=True)
@@ -89,6 +98,7 @@ class MonitoringConfig:
     discovery_sources: tuple[DiscoverySource, ...]
     verification: VerificationSettings
     carryover: CarryoverSettings
+    coverage: CoverageSettings
 
 
 def default_config_path() -> Path:
@@ -134,6 +144,7 @@ def _load_discovery_sources(raw: dict[str, Any]) -> tuple[DiscoverySource, ...]:
         enabled = entry.get("enabled")
         scope = entry.get("scope")
         regions = entry.get("regions")
+        pages = entry.get("pages", 1)
         if not isinstance(source_id, str) or source_id not in SUPPORTED_DISCOVERY_SOURCES:
             raise MonitoringConfigError(f"不支持的发现来源：{source_id}。")
         if source_id in seen_ids:
@@ -152,6 +163,12 @@ def _load_discovery_sources(raw: dict[str, Any]) -> tuple[DiscoverySource, ...]:
             raise MonitoringConfigError(
                 f"发现来源 {source_id} 的 regions 只能包含 domestic 或 international。"
             )
+        if not isinstance(pages, int) or isinstance(pages, bool) or not 1 <= pages <= 5:
+            raise MonitoringConfigError(
+                f"发现来源 {source_id} 的 pages 必须是 1 至 5。"
+            )
+        if source_id != "wechat_articles" and pages != 1:
+            raise MonitoringConfigError("只有微信公众号搜索支持多页采集。")
         seen_ids.add(source_id)
         discovery_sources.append(
             DiscoverySource(
@@ -160,6 +177,7 @@ def _load_discovery_sources(raw: dict[str, Any]) -> tuple[DiscoverySource, ...]:
                 enabled=enabled,
                 scope=scope.strip(),
                 regions=tuple(dict.fromkeys(regions)),
+                pages=pages,
             )
         )
 
@@ -308,6 +326,9 @@ def load_monitoring_config(path: str | Path | None = None) -> MonitoringConfig:
     ):
         raise MonitoringConfigError("国内与海外的优先条数之和必须等于 max_items。")
 
+    discovery_sources = _load_discovery_sources(raw)
+    sources_root = raw.get("sources", {})
+
     competitors_data = raw.get("competitors")
     if not isinstance(competitors_data, list) or not competitors_data:
         raise MonitoringConfigError("至少需要配置一个竞品。")
@@ -318,6 +339,7 @@ def load_monitoring_config(path: str | Path | None = None) -> MonitoringConfig:
             raise MonitoringConfigError("每个竞品都必须是 JSON 对象。")
         competitor_id = entry.get("id")
         aliases = entry.get("aliases")
+        related_entities = entry.get("related_entities", [])
         region = entry.get("region")
         if not isinstance(competitor_id, str) or not competitor_id:
             raise MonitoringConfigError("每个竞品都必须填写 id。")
@@ -329,6 +351,12 @@ def load_monitoring_config(path: str | Path | None = None) -> MonitoringConfig:
             isinstance(alias, str) and alias for alias in aliases
         ):
             raise MonitoringConfigError(f"竞品 {competitor_id} 至少需要一个非空别名。")
+        if not isinstance(related_entities, list) or not all(
+            isinstance(alias, str) and alias.strip() for alias in related_entities
+        ):
+            raise MonitoringConfigError(
+                f"竞品 {competitor_id} 的 related_entities 必须是文本列表。"
+            )
         seen_ids.add(competitor_id)
         priority = _positive_int(entry, "priority")
         if priority > 5:
@@ -355,10 +383,41 @@ def load_monitoring_config(path: str | Path | None = None) -> MonitoringConfig:
                 priority=priority,
                 aliases=tuple(aliases),
                 query=query,
+                related_entities=tuple(
+                    dict.fromkeys(item.strip() for item in related_entities)
+                ),
             )
         )
         if not competitors[-1].name or not competitors[-1].query:
             raise MonitoringConfigError(f"竞品 {competitor_id} 必须填写名称和搜索式。")
+
+    coverage_data = sources_root.get("coverage", {})
+    if not isinstance(coverage_data, dict):
+        raise MonitoringConfigError("sources.coverage 必须是 JSON 对象。")
+    coverage = CoverageSettings(
+        critical_priority_min=_positive_int(
+            coverage_data, "critical_priority_min"
+        ),
+        minimum_successful_sources=_positive_int(
+            coverage_data, "minimum_successful_sources"
+        ),
+    )
+    critical = [
+        competitor
+        for competitor in competitors
+        if competitor.priority >= coverage.critical_priority_min
+    ]
+    if not critical:
+        raise MonitoringConfigError("覆盖率配置必须选出至少一个关键竞品。")
+    for competitor in critical:
+        applicable = sum(
+            source.enabled and source.supports(competitor)
+            for source in discovery_sources
+        )
+        if coverage.minimum_successful_sources > applicable:
+            raise MonitoringConfigError(
+                f"竞品 {competitor.name} 的最低成功来源数超过已启用来源。"
+            )
 
     project_root = config_path.parent.parent
     return MonitoringConfig(
@@ -372,7 +431,8 @@ def load_monitoring_config(path: str | Path | None = None) -> MonitoringConfig:
         ),
         digest=digest,
         competitors=tuple(competitors),
-        discovery_sources=_load_discovery_sources(raw),
+        discovery_sources=discovery_sources,
         verification=_load_verification(raw),
         carryover=_load_carryover(raw, project_root=project_root),
+        coverage=coverage,
     )

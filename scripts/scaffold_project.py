@@ -23,6 +23,7 @@ ALLOWED_REGIONS = {"domestic", "international"}
 REGION_LABELS = {"domestic": "国内", "international": "海外"}
 DISCOVERY_SOURCE_DEFINITIONS = {
     "google_news": ("Google News", "国内+海外"),
+    "bing": ("必应搜索", "国内+海外"),
     "baidu": ("百度搜索", "国内+海外"),
     "360": ("360搜索", "国内+海外"),
     "wechat_articles": ("微信公众号搜索", "所有提及竞品的公众号文章"),
@@ -138,6 +139,28 @@ def _unique_text_list(
     if len(value) > maximum_items:
         raise SpecError(f"{label}最多包含 {maximum_items} 项。")
     result = [_text(item, f"{label}[{index}]", maximum=100) for index, item in enumerate(value)]
+    normalized = [item.casefold() for item in result]
+    if len(normalized) != len(set(normalized)):
+        raise SpecError(f"{label}不能包含重复项。")
+    return result
+
+
+def _optional_unique_text_list(
+    value: Any,
+    label: str,
+    *,
+    maximum_items: int = 20,
+) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise SpecError(f"{label}必须是列表。")
+    if len(value) > maximum_items:
+        raise SpecError(f"{label}最多包含 {maximum_items} 项。")
+    result = [
+        _text(item, f"{label}[{index}]", maximum=100)
+        for index, item in enumerate(value)
+    ]
     normalized = [item.casefold() for item in result]
     if len(normalized) != len(set(normalized)):
         raise SpecError(f"{label}不能包含重复项。")
@@ -308,7 +331,7 @@ def validate_spec(raw: Any) -> dict[str, Any]:
         root["sources"],
         "sources",
         required={"enabled"},
-        allowed={"enabled"},
+        allowed={"enabled", "wechat_pages", "coverage"},
     )
     enabled_sources_raw = _unique_text_list(
         sources["enabled"],
@@ -331,6 +354,34 @@ def validate_spec(raw: Any) -> dict[str, Any]:
         for source_id in DISCOVERY_SOURCE_DEFINITIONS
         if source_id in enabled_sources_raw
     ]
+    wechat_pages = _integer(
+        sources.get("wechat_pages", 3),
+        "sources.wechat_pages",
+        minimum=1,
+        maximum=5,
+    )
+    coverage_raw = sources.get("coverage", {})
+    coverage = _object(
+        coverage_raw,
+        "sources.coverage",
+        required=set(),
+        allowed={"critical_priority_min", "minimum_successful_sources"},
+    )
+    critical_priority_min = _integer(
+        coverage.get("critical_priority_min", 3),
+        "sources.coverage.critical_priority_min",
+        minimum=1,
+        maximum=5,
+    )
+    minimum_successful_sources = _integer(
+        coverage.get(
+            "minimum_successful_sources",
+            min(3, len(enabled_sources)),
+        ),
+        "sources.coverage.minimum_successful_sources",
+        minimum=1,
+        maximum=len(enabled_sources),
+    )
 
     carryover = _object(
         root["carryover"],
@@ -354,7 +405,15 @@ def validate_spec(raw: Any) -> dict[str, Any]:
             value,
             label,
             required={"id", "name", "region", "priority", "aliases"},
-            allowed={"id", "name", "region", "priority", "aliases", "query"},
+            allowed={
+                "id",
+                "name",
+                "region",
+                "priority",
+                "aliases",
+                "related_entities",
+                "query",
+            },
         )
         competitor_id = _slug(item["id"], f"{label}.id")
         name = _text(item["name"], f"{label}.name", maximum=100)
@@ -368,13 +427,18 @@ def validate_spec(raw: Any) -> dict[str, Any]:
             maximum=5,
         )
         aliases = _unique_text_list(item["aliases"], f"{label}.aliases")
+        related_entities = _optional_unique_text_list(
+            item.get("related_entities"),
+            f"{label}.related_entities",
+        )
         if name.casefold() not in {alias.casefold() for alias in aliases}:
             raise SpecError(f"{label}.aliases 必须包含竞品正式名称。")
         if "query" in item:
             legacy_query = _text(item["query"], f"{label}.query", maximum=300)
             if not any(alias.casefold() in legacy_query.casefold() for alias in aliases):
                 raise SpecError(f"{label}.query 必须包含至少一个竞品别名。")
-        query = " OR ".join(f'"{alias}"' for alias in dict.fromkeys((name, *aliases)))
+        query_terms = dict.fromkeys((name, *aliases, *related_entities))
+        query = " OR ".join(f'"{term}"' for term in query_terms)
         if competitor_id in seen_ids:
             raise SpecError(f"竞品 id 重复：{competitor_id}。")
         if name.casefold() in seen_names:
@@ -388,6 +452,7 @@ def validate_spec(raw: Any) -> dict[str, Any]:
                 "region": region,
                 "priority": priority,
                 "aliases": aliases,
+                "related_entities": related_entities,
                 "query": query,
             }
         )
@@ -396,6 +461,12 @@ def validate_spec(raw: Any) -> dict[str, Any]:
     missing_regions = [REGION_LABELS[region] for region in regions if region not in covered_regions]
     if missing_regions:
         raise SpecError(f"以下监控地区还没有竞品：{'、'.join(missing_regions)}。")
+    if not any(
+        item["priority"] >= critical_priority_min for item in competitors
+    ):
+        raise SpecError(
+            "sources.coverage.critical_priority_min 未选出任何关键竞品。"
+        )
 
     hour, minute = time_match.groups()
     return {
@@ -416,7 +487,14 @@ def validate_spec(raw: Any) -> dict[str, Any]:
             "preferred_domestic_items": preferred_domestic,
             "preferred_international_items": preferred_international,
         },
-        "sources": {"enabled": enabled_sources},
+        "sources": {
+            "enabled": enabled_sources,
+            "wechat_pages": wechat_pages,
+            "coverage": {
+                "critical_priority_min": critical_priority_min,
+                "minimum_successful_sources": minimum_successful_sources,
+            },
+        },
         "carryover": {"enabled": carryover_enabled},
         "competitors": competitors,
     }
@@ -498,9 +576,15 @@ def _write_monitoring_config(project_root: Path, spec: dict[str, Any]) -> None:
                         else "、".join(REGION_LABELS[item] for item in spec["regions"])
                     ),
                     "regions": spec["regions"],
+                    "pages": (
+                        spec["sources"]["wechat_pages"]
+                        if source_id == "wechat_articles"
+                        else 1
+                    ),
                 }
                 for source_id, (source_name, _scope) in DISCOVERY_SOURCE_DEFINITIONS.items()
             ],
+            "coverage": spec["sources"]["coverage"],
             "verification": {
                 "require_original": True,
                 "allow_official_public_notices": True,

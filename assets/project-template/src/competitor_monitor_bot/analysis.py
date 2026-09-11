@@ -168,6 +168,75 @@ def _parse_article(data: dict[str, Any], index: int) -> NewsArticle:
     )
 
 
+def _validate_empty_digest_coverage(
+    collection: dict[str, Any],
+    monitoring_config: MonitoringConfig | None,
+) -> None:
+    coverage = collection.get("coverage")
+    critical_competitors = (
+        coverage.get("critical_competitors")
+        if isinstance(coverage, dict)
+        else None
+    )
+    if (
+        not isinstance(coverage, dict)
+        or coverage.get("empty_digest_allowed") is not True
+        or not isinstance(critical_competitors, list)
+        or not critical_competitors
+        or any(
+            not isinstance(item, dict)
+            or item.get("met") is not True
+            or not isinstance(item.get("successful_source_count"), int)
+            or not isinstance(item.get("minimum_successful_sources"), int)
+            or item["successful_source_count"]
+            < item["minimum_successful_sources"]
+            for item in critical_competitors
+        )
+    ):
+        raise AnalysisError(
+            "空日报要求每个关键品牌达到配置的最低来源覆盖率；"
+            "覆盖不足时不得发送空日报。"
+        )
+    if monitoring_config is None:
+        return
+
+    if (
+        coverage.get("critical_priority_min")
+        != monitoring_config.coverage.critical_priority_min
+        or coverage.get("minimum_successful_sources")
+        != monitoring_config.coverage.minimum_successful_sources
+    ):
+        raise AnalysisError("空日报覆盖结果与当前 monitoring.json 配置不一致。")
+    attempts = collection.get("source_attempts")
+    if not isinstance(attempts, list):
+        raise AnalysisError("空日报缺少逐品牌逐来源的采集状态记录。")
+    for competitor in monitoring_config.competitors:
+        if competitor.priority < monitoring_config.coverage.critical_priority_min:
+            continue
+        applicable = {
+            source.id
+            for source in monitoring_config.discovery_sources
+            if source.enabled and source.supports(competitor)
+        }
+        statuses = {
+            str(item.get("source_id")): item.get("status")
+            for item in attempts
+            if isinstance(item, dict)
+            and item.get("competitor_id") == competitor.id
+            and item.get("source_id") in applicable
+        }
+        if set(statuses) != applicable:
+            raise AnalysisError(
+                f"空日报缺少关键品牌 {competitor.name} 的完整来源状态。"
+            )
+        successful = sum(status == "success" for status in statuses.values())
+        if successful < monitoring_config.coverage.minimum_successful_sources:
+            raise AnalysisError(
+                f"关键品牌 {competitor.name} 仅有 {successful} 个来源完整成功，"
+                "不得发送空日报。"
+            )
+
+
 def load_analysis_document(
     path: str | Path,
     *,
@@ -176,6 +245,8 @@ def load_analysis_document(
     lookback_days: int | None = None,
     required_fingerprints: set[str] | None = None,
     competitors: tuple[Competitor, ...] | None = None,
+    monitoring_config: MonitoringConfig | None = None,
+    require_empty_digest_coverage: bool = False,
 ) -> tuple[AnalyzedArticle, ...]:
     document_path = Path(path)
     try:
@@ -199,7 +270,7 @@ def load_analysis_document(
         raise AnalysisError("分析文档中的 articles 必须是列表。")
     if len(raw_articles) > max_items:
         raise AnalysisError(f"分析文档最多只能保留 {max_items} 条。")
-    if not raw_articles:
+    if not raw_articles or require_empty_digest_coverage:
         collection = document.get("collection")
         successful_sources = (
             collection.get("successful_sources")
@@ -217,6 +288,7 @@ def load_analysis_document(
             raise AnalysisError(
                 "空日报必须证明至少一个配置来源采集成功；全部来源失败时不得发送。"
             )
+        _validate_empty_digest_coverage(collection, monitoring_config)
     try:
         generated_at = datetime.fromisoformat(str(document.get("generated_at", "")))
     except ValueError as exc:
