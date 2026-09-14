@@ -113,6 +113,8 @@ PYTHONPATH=src .venv/bin/python -m competitor_monitor_bot.cli check-result
 
 更新 Skill 不会覆盖已经生成的机器人项目。已有项目需单独迁移相关代码、配置与定时规则，并保留凭据、SQLite 和延期队列。
 
+自动化提示词应明确标识 heartbeat，触发后的第一项任务是运行只读 `check-result`，不能以“已收到”或“请告诉我下一步”结束。建议保持自动化会话和模型稳定；模型切换提示本身不能证明漏执行原因。提示词更新只是加固，仍需下一次真实触发验证。专用会话迁移须通过现有任务更新完成，避免重复播报。
+
 用户明确要求同日补发遗漏动态时，可给 `analysis-preview`、`send-analysis`、`check-result` 使用同一个 `--supplement-id`。补充日报独立记账，保留原日报记录，两类历史共同去重；相同批次不会重发，无新增不发送空补充消息。自动定时任务不自行补发。
 
 ## 安全边界

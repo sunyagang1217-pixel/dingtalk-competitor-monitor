@@ -115,6 +115,8 @@ Set the optional `schedule.result_check_time` to add a later check, for example 
 
 Updating the Skill does not overwrite existing generated robots. Migrate their code, configuration and scheduled instructions separately while preserving credentials, SQLite history and carryover queues.
 
+The automation prompt should explicitly identify a heartbeat and require a read-only `check-result` as its first task, rather than ending with a conversational acknowledgment. Keeping the automation conversation and model stable is recommended; a model-switch notice alone does not establish the cause of a missed run. Prompt changes still require validation on a real scheduled trigger. Migrate to a dedicated conversation by updating the existing task to avoid duplicate delivery.
+
 When a user explicitly requests a same-day supplement for missed news, use the same `--supplement-id` with `analysis-preview`, `send-analysis` and `check-result`. Supplements have separate delivery records, preserve the primary digest, and share article deduplication across both histories. Retrying the same batch does not resend; no new articles means no supplemental message. Scheduled tasks must not create supplement batches automatically.
 
 ## Safety model
